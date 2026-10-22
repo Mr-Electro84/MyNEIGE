@@ -25,6 +25,7 @@
 #include <mutex>
 #include <set>
 #include <sstream>
+#include <syncstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -318,6 +319,19 @@ inline void writePipe(HANDLE pipe, const std::string &text) {
     }
 }
 std::string managementQuote(const std::string &value);
+inline std::string readHeader(SOCKET client) {
+    std::string result;
+    const auto deadline = GetTickCount64() + 5000;
+    while (result.size() < 16384) {
+        require(GetTickCount64() < deadline, "Proxy header timeout");
+        char c = 0;
+        require(recv(client, &c, 1, 0) == 1, "Incomplete proxy header");
+        result += c;
+        if (result.size() >= 4 && result.compare(result.size() - 4, 4, "\r\n\r\n") == 0)
+            return result;
+    }
+    throw std::runtime_error("Proxy header limit exceeded");
+}
 std::string managementFrame(const std::string &value);
 std::string normalizeProfile(const std::string &source);
 std::vector<uint32_t> dnsParse(const Bytes &packet, uint16_t id, const std::string &name, bool &truncated);
@@ -325,6 +339,7 @@ Bytes dnsQuery(const std::string &name, uint16_t id);
 std::string basic64(const std::string &text);
 bool constantEqual(const std::string &a, const std::string &b);
 bool validHost(const std::string &host);
+bool universityHost(const std::string &host);
 struct ConnectRequest {
     std::string host;
     std::string authorization;

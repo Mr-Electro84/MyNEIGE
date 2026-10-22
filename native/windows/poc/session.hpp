@@ -17,6 +17,10 @@ struct Options {
     unsigned seconds = 30;
     bool authenticationProbe = false;
     bool localManagementTest = false;
+    bool qualification = false;
+    bool crashAfterProbes = false;
+    bool browserMode = false;
+    std::filesystem::path projectRoot = std::filesystem::current_path();
 };
 int relayWorker();
 int blockedProbe(uint16_t port, bool ipv6 = false, bool bound = false);

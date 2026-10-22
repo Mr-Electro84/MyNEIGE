@@ -13,8 +13,13 @@
   "license": "Apache-2.0",
   "author": "",
   "type": "commonjs",
-  "main": "index.js",
+  "main": "src/main/index.js",
   "scripts": {
+    "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-browser.ps1",
+    "test:js": "node --test tests/*.test.js",
+    "poc:qualify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/qualify-j1.ps1",
+    "poc:analyze": "node scripts/analyze-j1.js",
+    "browser:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-wfp.ps1 -Elevate -TestCommand browser-test",
     "poc:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-poc.ps1",
     "poc:inspect": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-poc.ps1 -Mode inspect",
     "poc:wfp-test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-wfp.ps1 -Elevate",
@@ -23,6 +28,6 @@
     "poc:live": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-live-poc.ps1"
   },
   "devDependencies": {
-    "electron": "^45.0.0"
+    "electron": "45.0.0"
   }
 }

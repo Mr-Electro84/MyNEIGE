@@ -1,14 +1,14 @@
 # Plan d’exécution — MyNEIGE, navigateur universitaire avec VPN isolé
 
-Révision : 22 octobre 2026.
+Révision : 23 octobre 2026.
 
-**Statut : GO reçu le 22 octobre 2026 pour le pilote Windows (J0/J1). Interface finale, packaging et Linux différés.**
+**Statut : GO initial pour le pilote Windows, puis GO pour poursuivre J1 et commencer J2. Interface finale, packaging et Linux différés.**
 
 Le code du pilote et son mode d’emploi figurent dans [README.md](README.md) et [docs/POC_WINDOWS.md](docs/POC_WINDOWS.md). Les résultats réellement obtenus sont consignés dans [docs/POC_STATUS.md](docs/POC_STATUS.md). Un prototype compilé ne vaut pas démonstration d’isolation complète.
 
-Le pilote est volontairement limité à des requêtes HTTPS en console via WinHTTP. Il crée un TAP dédié, applique sa quarantaine avant le lancement d’OpenVPN et contrôle les sorties par WFP et liaison explicite des sockets. Les essais du navigateur Electron, la réduction des privilèges du relais et le packaging restent hors de cette première réalisation.
+Le pilote crée un TAP dédié, applique sa quarantaine avant OpenVPN et contrôle les sorties par WFP et liaison explicite des sockets. Le mode console utilise WinHTTP ; le début de J2 ajoute un formulaire et une session Electron protégée. Relais et Electron utilisent désormais des jetons restreints de niveau moyen. Le packaging reste différé.
 
-**Résultat du pilote au 22 octobre 2026 : connexion VPN réelle, DNS et réponse HTTPS APPIGS `302` réussis ; sondes répétées, refus proxy, blocage d’un autre exécutable sur le tunnel, pertes VPN/relais et nettoyage testés. Les 26 tests automatisés passent. La faisabilité fonctionnelle Windows est démontrée ; la validation complète d’isolation attend les captures et le reste de la recette.**
+**Résultat au 23 octobre : VPN réel, DNS UDP/TCP et HTTPS APPIGS `302` ; captures physique/TAP, application témoin simultanée, perte/restauration de la route propre, arrêt VPN/relais et crash brutal du contrôleur exécutés. Précontrôle Electron IPv4/IPv6/UDP, enfant, sandbox et authentification du proxy par Chromium réussis. Les 37 tests automatisés passent. J2 : formulaire réel et page CAS affichée, confirmée par l’utilisateur ; connexion ENT non testée. La clôture complète de J1 reste conditionnée aux cas non exécutés, notamment R7.**
 
 ## 1. Verdict et état de la validation
 
@@ -18,7 +18,7 @@ L’exigence la plus difficile reste l’isolation : un proxy Node.js utilisant 
 
 L’analyse initiale repose sur la lecture du dépôt, l’extraction locale des métadonnées du certificat et la documentation technique. L’état des essais du pilote est désormais suivi séparément dans le rapport de validation ; les observations statiques ci-dessous ne sont pas des résultats de connexion.
 
-État au démarrage du pilote : Electron 45.0.0 et Node 24.22.1 présents, OpenVPN absent. Le pilote C++/Win32 et ses scripts sont ajoutés sans interface Electron ni installateur. Le relais tourne encore avec le jeton élevé du contrôleur : séparation des privilèges et confinement Electron restent à réaliser avant le jalon suivant.
+État au démarrage : Electron 45.0.0 et Node 24.22.1 présents, OpenVPN absent. État actuel : moteur signé OpenVPN Community 2.7.8-I001 et TAP installés, runtime Electron 45.0.0 épinglé, séparation des privilèges et confinement initial Electron implémentés. Aucun installateur applicatif.
 
 ## 2. Analyse du profil fourni
 
@@ -254,11 +254,11 @@ docs/                           # décisions, recette et installation
 
 L’utilisateur saisira les identifiants localement lors des essais. Aucun mot de passe à communiquer dans le chat. Aucune charge/date ferme avant le verdict J1.
 
-État : J0 réalisé ; volet fonctionnel de J1 réussi sur la machine de développement. J1 reste ouvert pour les captures et scénarios de transition. Aucun passage à J2 ou au packaging dans ce GO.
+État : J0 réalisé ; preuves contrôlées J1 acquises et décision dans [docs/ARCHITECTURE_WINDOWS.md](docs/ARCHITECTURE_WINDOWS.md). J1 n’est pas déclaré intégralement clos : veille, changement physique de réseau, VPN tiers et changements effectifs de DNS restent à qualifier. J2 a commencé conformément au nouveau GO : formulaire, IPC authentifié, session et confinement, ouverture CAS réelle confirmée. Parcours ENT authentifié à poursuivre. Aucun démarrage du packaging.
 
 ## 10. Recette et preuves attendues
 
-Le GO couvre le pilote Windows. Les scénarios ci-dessous restent des exigences de recette ; seuls ceux explicitement marqués comme exécutés dans le rapport de validation sont acquis. Le test HTTPS du pilote utilise WinHTTP ; les cas liés à Electron/WebRTC restent différés.
+Le GO couvre le pilote Windows et le début de J2. Les scénarios ci-dessous restent des exigences de recette ; seuls ceux explicitement marqués exécutés dans le rapport sont acquis. Le HEAD WinHTTP, les sondes Electron locales et une navigation ENT complète constituent des preuves distinctes.
 
 Relever routes IPv4/IPv6, DNS, interfaces, règles MyNEIGE et processus avant/pendant/après. Capturer simultanément interfaces physique et VPN sur une machine d’essai. Minimiser et nettoyer les captures avant partage ; ne jamais publier de capture contenant une authentification ou un token.
 
@@ -291,7 +291,7 @@ Automatiser les tests utiles : lignes management fragmentées, échappement des 
 - Limites du VPN, de l’ENT et des paquets explicitement documentées.
 - Aucune isolation multiplateforme déclarée acquise sur la base d’un seul accès web Windows.
 
-Le GO reçu autorise le pilote Windows. Le serveur, les paramètres poussés et l’accès HTTPS via le relais ont été validés par un essai réel. Les captures et scénarios d’isolation restants doivent encore être validés avant de passer à l’interface et au packaging.
+Le serveur, les paramètres poussés et l’accès HTTPS via le relais sont validés par essais réels. Les captures acquises portent sur des scénarios contrôlés sur cette machine. Les transitions restantes conditionnent la clôture complète de J1 ; le nouveau GO permet le début expérimental de J2. Le packaging attend J3.
 
 ## 12. Références
 

@@ -1,4 +1,5 @@
 #include "session.hpp"
+#include "browser.hpp"
 #include <winhttp.h>
 
 namespace neige {
@@ -200,7 +201,8 @@ struct DedicatedTap {
     void remove() {
         if (!created)
             return;
-        removeOwnedTap(job, tool, name);
+        Job cleanupJob;
+        removeOwnedTap(cleanupJob, tool, name);
         require(DeleteFileW(journal.c_str()) != 0, "Cannot remove TAP journal");
         created = false;
     }
@@ -371,6 +373,23 @@ static void rejectOtherImageOnTunnel(const Adapter &vpn, uint32_t target) {
     }
     require(denied, "Other executable was not denied VPN access by WSAEACCES; isolation is not demonstrated");
 }
+static void physicalControlProbe(uint32_t destination) {
+    Socket socket(::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+    require(socket.s != INVALID_SOCKET, "Cannot create ordinary-application control socket");
+    bool connected = false;
+    try {
+        connectWithin(socket.s, endpoint(destination, 443), 2000);
+        connected = true;
+    } catch (const std::exception &) {
+    }
+    sockaddr_in source{};
+    int size = sizeof(source);
+    require(getsockname(socket.s, reinterpret_cast<sockaddr *>(&source), &size) == 0 && source.sin_port,
+            "Cannot identify ordinary-application control flow");
+    std::cout << "HOST_CONTROL_FLOW source=" << ipText(ntohl(source.sin_addr.S_un.S_addr)) << ":"
+              << ntohs(source.sin_port) << " destination=" << ipText(destination)
+              << ":443 connected=" << (connected ? "true" : "false") << std::endl;
+}
 int inspect(const Options &options) {
     auto profile = normalizeProfile(readTextFile(options.profile));
     std::cout << "PROFILE_VALIDATED normalized_bytes=" << profile.size() << "\n";
@@ -397,6 +416,7 @@ int wfpTest() {
     require(isAdministrator(), "wfp-test requires an elevated console");
     auto mutex = sessionMutex();
     Staging staging;
+    staging.allowUserRead();
     Firewall firewall;
     Job job;
     Child child;
@@ -515,7 +535,8 @@ int adapterTest(const Options &options) {
 }
 int connectSession(const Options &options) {
     require(isAdministrator(), "connect requires an elevated console");
-    require(options.seconds >= 1 && options.seconds <= 60, "Pilot duration must be between 1 and 60 seconds");
+    protectSupervisor();
+    require(options.seconds >= 1 && options.seconds <= (options.browserMode ? 3600u : 60u), "Invalid pilot duration");
     auto mutex = sessionMutex();
     validateOpenVpn(options.openvpn);
     auto config = normalizeProfile(readTextFile(options.profile));
@@ -536,6 +557,7 @@ int connectSession(const Options &options) {
     }
     Job job;
     Child openvpn, relay;
+    std::unique_ptr<BrowserPilot> browser;
     Management management;
     OwnedRoute route;
     Firewall firewall;
@@ -550,6 +572,8 @@ int connectSession(const Options &options) {
     SetConsoleCtrlHandler(consoleHandler, TRUE);
     auto cleanup = [&] {
         // Kill/join all emitters before touching route or WFP; persistent WFP is retained if route cleanup fails.
+        if (browser)
+            browser->stop();
         relay.stop();
         try {
             if (management.socket.s != INVALID_SOCKET)
@@ -559,6 +583,7 @@ int connectSession(const Options &options) {
         if (openvpn.running())
             WaitForSingleObject(openvpn.process.h, 3000);
         openvpn.stop();
+        job.terminate();
         management.socket.reset();
         route.remove();
         tap.remove();
@@ -569,6 +594,12 @@ int connectSession(const Options &options) {
     try {
         tap.create();
         firewall.install(staging.executable.wstring(), &tap.identity);
+        if (options.browserMode) {
+            staging.allowUserRead();
+            browser = std::make_unique<BrowserPilot>();
+            browser->prepare(staging, options.projectRoot);
+            browser->launch(firewall);
+        }
         uint16_t managementPort = 0;
         auto listener = loopbackListener(managementPort);
         auto managementToken = randomHex();
@@ -661,12 +692,18 @@ int connectSession(const Options &options) {
                     }
                     require(!authSent, "Unexpected repeated authentication; restart the session explicitly");
                     Credentials credentials;
-                    credentials.username = options.localManagementTest
-                                               ? "myneige-local-protocol-test"
-                                               : consoleSecret("Identifiant UAPV (saisie masquee) : ");
-                    credentials.password = options.localManagementTest
-                                               ? randomHex()
-                                               : consoleSecret("Mot de passe UAPV (saisie masquee) : ");
+                    if (browser) {
+                        auto submitted = browser->credentials();
+                        credentials.username.swap(submitted.first);
+                        credentials.password.swap(submitted.second);
+                    } else {
+                        credentials.username = options.localManagementTest
+                                                   ? "myneige-local-protocol-test"
+                                                   : consoleSecret("Identifiant UAPV (saisie masquee) : ");
+                        credentials.password = options.localManagementTest
+                                                   ? randomHex()
+                                                   : consoleSecret("Mot de passe UAPV (saisie masquee) : ");
+                    }
                     auto username = "username \"Auth\" " + managementQuote(credentials.username);
                     auto password = "password \"Auth\" " + managementQuote(credentials.password);
                     try {
@@ -718,10 +755,13 @@ int connectSession(const Options &options) {
             }
         }
         std::cout << "VPN_ADDRESS_PREFERRED\n";
+        reportTransport(openvpn.pid);
+        std::cout << "VPN_INTERFACE index=" << vpn.index << " luid=" << vpn.luid << " guid=" << vpn.guid << std::endl;
+        std::cout << "SESSION_GENERATION id=" << utf8(staging.directory.filename().wstring()) << std::endl;
         require(vpn.dns.empty(), "Unexpected IPv4 DNS assigned to the VPN interface; host DNS isolation not validated");
         vpnLuid = vpn.luid;
-        require(vpn.luid == tap.identity.luid && vpn.index == tap.identity.index &&
-                    !baseline.interfaces.count(vpn.luid),
+        require(vpn.luid == tap.identity.luid && vpn.index == tap.identity.index && vpn.guid == tap.identity.guid &&
+                    vpn.name == tap.identity.name && !baseline.interfaces.count(vpn.luid),
                 "OpenVPN did not use its dedicated quarantined adapter");
         auto afterConnect = NetworkSnapshot::capture(vpn.luid);
         verifyNetworkSnapshot(baseline, afterConnect,
@@ -735,18 +775,22 @@ int connectSession(const Options &options) {
         require(gateway != 0, "No VPN gateway metadata received. Supply a verified --gateway; do not guess");
         firewall.allowVpn(staging.executable.wstring(), vpn);
         route.add(vpn, gateway);
-        relay = job.spawn(staging.executable.wstring(), {L"relay-worker"});
-        std::string configuration = "MYNEIGE_RELAY_V1\n" + ipText(vpn.address) + "\n" + std::to_string(vpn.index) +
+        staging.allowUserRead();
+        relay = job.spawn(staging.executable.wstring(), {L"relay-worker"}, true, true);
+        std::string configuration = "MYNEIGE_RELAY_V3\n" + ipText(vpn.address) + "\n" + std::to_string(vpn.index) +
                                     "\n" + std::to_string(vpn.luid) + "\n";
+        configuration += vpn.guid + "\n" + vpn.name + "\n";
         for (size_t i = 0; i < dns.size(); ++i)
             configuration += (i ? "," : "") + ipText(dns[i]);
         configuration += "\nwww.appigs.univ-avignon.fr\n" + token + "\n";
+        configuration += options.browserMode ? "university\n" : "appigs\n";
         writePipe(relay.input.h, configuration);
         wipe(configuration);
         std::string readyLine;
-        for (unsigned attempt = 0; attempt < 8; ++attempt) {
+        for (unsigned attempt = 0; attempt < 32; ++attempt) {
             readyLine = relay.line(30000);
-            if (readyLine.rfind("DNS_ATTEMPT_FAILED stage=", 0) != 0 && readyLine.rfind("DNS_BIND_FAILURE ", 0) != 0)
+            if (readyLine.rfind("DNS_ATTEMPT_FAILED stage=", 0) != 0 && readyLine.rfind("DNS_BIND_FAILURE ", 0) != 0 &&
+                readyLine.rfind("VPN_FLOW ", 0) != 0 && readyLine != "DNS_UDP_TCP_VALIDATED")
                 break;
             // This is generated by our worker, not raw network or management input.
             std::cout << readyLine << std::endl;
@@ -758,6 +802,8 @@ int connectSession(const Options &options) {
         auto parsedPort = std::stoul(ready[1]);
         require(parsedPort > 0 && parsedPort <= 65535, "Invalid proxy port");
         auto port = static_cast<uint16_t>(parsedPort);
+        std::cout << "PROXY_ENDPOINT port=" << port << std::endl;
+        std::cout << "SUPERVISED_PROCESS openvpn_pid=" << openvpn.pid << " relay_pid=" << relay.pid << std::endl;
         auto targets = split(ready[2], ',');
         for (auto &address : targets) {
             require(defaultInterfaceFor(ipv4(address)) != vpn.index,
@@ -765,6 +811,8 @@ int connectSession(const Options &options) {
             std::cout << "TARGET_IPV4 " << ipText(ipv4(address)) << " unbound_route_uses_vpn=false\n";
         }
         require(!targets.empty(), "No target address for the tunnel exclusion test");
+        if (options.qualification)
+            physicalControlProbe(ipv4(targets.front()));
         rejectOtherImageOnTunnel(vpn, ipv4(targets.front()));
         std::cout << "OTHER_IMAGE_TUNNEL_BIND_DENIED\n";
         rejectUnauthenticated(port);
@@ -772,14 +820,44 @@ int connectSession(const Options &options) {
         DWORD status = httpsHead(port, token);
         require(status >= 200 && status < 500 && status != 407, "Unexpected target HTTP response");
         std::cout << "HTTPS_TLS_VERIFIED status=" << status << " (HEAD only; no student page body collected)\n";
+        if (browser)
+            browser->ready(firewall, port, token);
+        if (options.qualification) {
+            // Remove only our own low-priority tunnel route. Host connectivity is never disabled.
+            route.remove();
+            bool denied = false;
+            try {
+                denied = httpsHead(port, token) >= 500;
+            } catch (const std::exception &) {
+                denied = true;
+            }
+            require(denied, "Request succeeded without the owned VPN route");
+            std::cout << "OWNED_ROUTE_LOSS_REQUEST_BLOCKED" << std::endl;
+            route.add(vpn, gateway);
+            auto recoveredStatus = httpsHead(port, token);
+            require(recoveredStatus >= 200 && recoveredStatus < 500 && recoveredStatus != 407,
+                    "Request did not recover after restoring the owned route");
+            std::cout << "OWNED_ROUTE_RESTORED_HTTPS status=" << recoveredStatus << std::endl;
+        }
         std::cout << "READY_FOR_CAPTURE duration_seconds=" << options.seconds << ". Ctrl+C stops the session.\n";
         auto activeUntil = GetTickCount64() + options.seconds * 1000ULL;
         auto nextProbe = GetTickCount64() + 5000;
         while (!cancelled && GetTickCount64() < activeUntil) {
+            if (browser && browser->wantsStop())
+                break;
+            for (unsigned n = 0; n < 64; ++n) {
+                auto output = relay.pollLine();
+                if (output.empty())
+                    break;
+                if (output.rfind("VPN_FLOW ", 0) == 0 || output.rfind("FLOW ", 0) == 0 || output == "REQUEST_FAILED")
+                    std::cout << output << std::endl;
+            }
             require(openvpn.running() && relay.running(), "A supervised network process exited");
             auto current = adapterFor(localIp);
             require(current.dns.empty(), "VPN interface DNS changed; session blocked");
-            require(current.luid == vpn.luid && current.index == vpn.index, "VPN identity changed");
+            require(current.luid == vpn.luid && current.index == vpn.index && current.guid == vpn.guid &&
+                        current.name == vpn.name,
+                    "VPN identity changed");
             auto snapshot = NetworkSnapshot::capture(vpn.luid);
             verifyNetworkSnapshot(baseline, snapshot, "Host network changed; session blocked");
             for (auto &address : targets)
@@ -795,14 +873,21 @@ int connectSession(const Options &options) {
                     throw std::runtime_error("Tunnel requires renewed authentication or failed");
                 wipe(line);
             }
-            if (GetTickCount64() >= nextProbe) {
+            if (!browser && GetTickCount64() >= nextProbe) {
                 auto probeStatus = httpsHead(port, token);
                 require(probeStatus >= 200 && probeStatus < 500 && probeStatus != 407, "Repeated HTTPS probe failed");
                 std::cout << "HTTPS_PROBE status=" << probeStatus << "\n";
                 nextProbe = GetTickCount64() + 5000;
             }
         }
+        if (options.crashAfterProbes) {
+            std::cout << "CONTROLLED_CONTROLLER_CRASH exit=86" << std::endl;
+            TerminateProcess(GetCurrentProcess(), 86);
+            ExitProcess(86);
+        }
         // Controlled tunnel loss. The relay remains quarantined while testing its failure response.
+        if (browser)
+            browser->stop();
         openvpn.stop();
         bool blocked = false;
         try {
@@ -830,7 +915,9 @@ int connectSession(const Options &options) {
         std::cout << "RESULT "
                      "{\"live_https\":true,\"proxy_auth\":true,\"tunnel_loss_blocked\":true,\"relay_loss_blocked\":"
                      "true,\"other_image_tunnel_bind_blocked\":true,\"packet_capture\":\"manual_required\","
-                     "\"electron\":\"not_in_this_pilot\",\"feasibility\":"
+                     "\"electron\":\""
+                  << (options.browserMode ? "pilot_started" : "not_used")
+                  << "\",\"feasibility\":"
                      "\"not_yet_certified\"}\n";
     } catch (...) {
         DWORD processCode = 0;

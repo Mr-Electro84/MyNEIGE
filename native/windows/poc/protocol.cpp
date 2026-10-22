@@ -1,6 +1,12 @@
 #include "common.hpp"
 
 namespace neige {
+bool universityHost(const std::string &host) {
+    const std::string suffix = ".univ-avignon.fr";
+    return validHost(host) &&
+           (host == "univ-avignon.fr" ||
+            (host.size() > suffix.size() && host.compare(host.size() - suffix.size(), suffix.size(), suffix) == 0));
+}
 std::string managementFrame(const std::string &value) {
     require(!value.empty() && value.size() < 8192 && value.find_first_of("\r\n") == std::string::npos &&
                 value.find('\0') == std::string::npos,

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; form-action 'none'; frame-src 'none'; base-uri 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyNEIGE · Pilote Windows</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="form.js" defer></script>
+</head>
+<body>
+  <main>
+    <p class="label">MYNEIGE · PILOTE WINDOWS</p>
+    <h1>Votre accès universitaire</h1>
+    <p>Connectez le VPN pour ouvrir APPIGS dans une fenêtre protégée.</p>
+    <p id="state" role="status" aria-live="polite">Vérification des protections réseau…</p>
+    <form id="credentials" autocomplete="off">
+      <label for="username">Identifiant universitaire</label>
+      <input id="username" name="username" type="text" maxlength="1024" autocomplete="off" autocapitalize="none" spellcheck="false" required disabled>
+      <label for="password">Mot de passe VPN</label>
+      <input id="password" name="password" type="password" maxlength="1024" autocomplete="off" required disabled>
+      <button id="connect" type="submit" disabled>Connecter et ouvrir APPIGS</button>
+    </form>
+    <button id="disconnect" class="secondary" type="button">Fermer la session</button>
+    <p class="note">Les identifiants restent en mémoire pendant la connexion. Le site peut ensuite demander une connexion ENT distincte.</p>
+  </main>
+</body>
+</html>

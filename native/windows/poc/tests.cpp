@@ -53,6 +53,12 @@ int selfTest() {
                     !validHost("a/b") && !validHost("a.test."),
                 "Hostname validation mismatch");
     });
+    test("university scope rejects suffix lookalikes and local names", [] {
+        require(universityHost("cas.univ-avignon.fr") && universityHost("univ-avignon.fr") &&
+                    !universityHost("univ-avignon.fr.attacker.test") && !universityHost("eviluniv-avignon.fr") &&
+                    !universityHost("127.0.0.1") && !universityHost("a..univ-avignon.fr"),
+                "University scope mismatch");
+    });
     const std::string base =
         "dev tun\nclient\nremote vpn.example.test 443 tcp-client\nauth-user-pass\nremote-cert-tls "
         "server\nncp-ciphers AES-128-GCM:AES-128-CBC\nauth SHA256\n<ca>\n-----BEGIN CERTIFICATE-----\nYWJj\n-----END "

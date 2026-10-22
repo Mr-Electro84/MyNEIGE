@@ -1,14 +1,23 @@
-# MyNEIGE — pilote réseau Windows
+# MyNEIGE — pilote Windows
 
-Prototype en console pour étudier un accès APPIGS via un VPN universitaire limité à l’application. L’interface Electron et le packaging sont différés.
+Prototype pour étudier un accès APPIGS via un VPN universitaire limité à l’application : contrôleur C++/Win32, relais CONNECT/DNS et début d’interface Electron. Interface finale, packaging et Linux différés.
 
-Essai réel réussi sur Windows : VPN, DNS du tunnel et réponse HTTPS APPIGS `302`, sondes répétées, blocages et nettoyage. L’absence de fuite par captures et le parcours ENT/CAS restent à valider ; voir [le rapport](docs/POC_STATUS.md).
+Essais réels : VPN, DNS UDP/TCP du tunnel, HTTPS APPIGS `302`, pertes de route/VPN/relais et crash du contrôleur ; formulaire Electron et page CAS affichée. Captures et limites : [rapport](docs/POC_STATUS.md). Le parcours ENT authentifié complet reste à valider.
 
 ```powershell
 npm run poc:build
 npm test
 npm run poc:inspect
 ```
+
+Début de J2, après installation des dépendances Electron épinglées (`npm ci`) :
+
+```powershell
+npm run browser:test  # Précontrôle local, sans identifiants, avec UAC
+npm start            # Contrôleur élevé, formulaire et navigateur non administrateurs
+```
+
+La navigation ne démarre qu’après validation du tunnel. Le formulaire reçoit les identifiants VPN localement ; le site peut demander ensuite une connexion ENT distincte. La session s’arrête à la fermeture du formulaire ou après 30 minutes.
 
 Le test du filtrage Windows nécessite une console administrateur :
 

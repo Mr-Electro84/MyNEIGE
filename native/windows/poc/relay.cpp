@@ -15,20 +15,6 @@ static bool forbiddenDestination(uint32_t ip, const Adapter &vpn) {
             return true;
     return false;
 }
-static std::string readHeader(SOCKET client) {
-    std::string result;
-    auto deadline = GetTickCount64() + 5000;
-    while (result.size() < 16384) {
-        require(GetTickCount64() < deadline, "Proxy header timeout");
-        char c = 0;
-        int count = recv(client, &c, 1, 0);
-        require(count == 1, "Incomplete proxy header");
-        result += c;
-        if (result.size() >= 4 && result.compare(result.size() - 4, 4, "\r\n\r\n") == 0)
-            return result;
-    }
-    throw std::runtime_error("Proxy header limit exceeded");
-}
 static void tunnel(SOCKET client, SOCKET remote) {
     std::array<char, 16384> buffer{};
     uint64_t up = 0, down = 0;
@@ -66,28 +52,39 @@ static void tunnel(SOCKET client, SOCKET remote) {
             lastActivity = GetTickCount64();
         }
     }
-    std::cout << "FLOW " << up << " " << down << std::endl;
+    std::osyncstream(std::cout) << "FLOW " << up << " " << down << std::endl;
 }
 int relayWorker() {
+    requirePrivilegedParent();
+    require(!isAdministrator(), "Relay must run without administrator rights");
     require(GetFileType(GetStdHandle(STD_INPUT_HANDLE)) == FILE_TYPE_PIPE,
             "Relay requires its inherited anonymous configuration pipe");
-    require(configLine() == "MYNEIGE_RELAY_V1", "Unknown relay configuration");
+    require(configLine() == "MYNEIGE_RELAY_V3", "Unknown relay configuration");
     Adapter vpn;
     vpn.address = ipv4(configLine());
     vpn.index = static_cast<uint32_t>(std::stoul(configLine()));
     vpn.luid = std::stoull(configLine());
+    vpn.guid = configLine();
+    vpn.name = configLine();
     std::vector<uint32_t> dns;
     for (auto &server : split(configLine(), ','))
         dns.push_back(ipv4(server));
     std::string host = lower(configLine()), token = configLine();
+    const auto scope = configLine();
+    require(scope == "appigs" || scope == "university", "Invalid relay destination scope");
     require(validHost(host) && token.size() == 64, "Invalid relay session");
     for (char c : token)
         require(isxdigit(static_cast<unsigned char>(c)) != 0, "Invalid session token");
     std::string expected = "Basic " + basic64("myneige:" + token);
     wipe(token);
     auto current = adapterFor(vpn.address);
-    require(current.luid == vpn.luid && current.index == vpn.index, "VPN interface changed before relay start");
+    require(current.luid == vpn.luid && current.index == vpn.index && current.guid == vpn.guid &&
+                current.name == vpn.name,
+            "VPN interface changed before relay start");
     auto addresses = resolveVpn(vpn, dns, host);
+    auto tcpAddresses = resolveVpnTcp(vpn, dns, host);
+    require(!tcpAddresses.empty(), "No usable DNS TCP response");
+    std::cout << "DNS_UDP_TCP_VALIDATED" << std::endl;
     for (auto ip : addresses)
         require(!forbiddenDestination(ip, vpn), "Target resolved to a forbidden local address");
     uint16_t port = 0;
@@ -96,51 +93,70 @@ int relayWorker() {
     for (size_t i = 0; i < addresses.size(); ++i)
         std::cout << (i ? "," : "") << ipText(addresses[i]);
     std::cout << std::endl;
-    // One request at a time deliberately bounds resources in this network-only pilot.
+    // Browser resources require concurrent CONNECTs; concurrency remains explicitly bounded.
+    static std::atomic<unsigned> active{0};
     for (;;) {
         Socket client(accept(listener.s, nullptr, nullptr));
         require(client.s != INVALID_SOCKET, "Proxy accept failed");
         socketTimeout(client.s, 3000);
-        bool established = false;
-        try {
-            auto request = parseConnect(readHeader(client.s));
-            if (!constantEqual(request.authorization, expected)) {
-                wipe(request.authorization);
-                sendText(client.s, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic "
-                                   "realm=\"MyNEIGE-PoC\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-                continue;
+        if (active.fetch_add(1) >= 16) {
+            --active;
+            try {
+                sendText(client.s,
+                         "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            } catch (...) {
             }
-            wipe(request.authorization);
-            if (request.host != host) {
-                sendText(client.s, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-                continue;
-            }
-            // No resolver cache: every new CONNECT is resolved through the VPN.
-            auto resolved = resolveVpn(vpn, dns, host);
-            Socket remote;
-            for (auto address : resolved) {
-                require(!forbiddenDestination(address, vpn), "Forbidden target address");
-                try {
-                    auto candidate = vpnSocket(vpn, SOCK_STREAM, IPPROTO_TCP);
-                    connectWithin(candidate.s, endpoint(address, 443));
-                    remote = std::move(candidate);
-                    break;
-                } catch (const std::exception &) { /* Next A record, still bound to the same tunnel. */
-                }
-            }
-            require(remote.s != INVALID_SOCKET, "Target unreachable through VPN");
-            sendText(client.s, "HTTP/1.1 200 Connection Established\r\n\r\n");
-            established = true;
-            tunnel(client.s, remote.s);
-        } catch (const std::exception &) {
-            if (!established) {
-                try {
-                    sendText(client.s, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-                } catch (...) {
-                }
-            }
-            std::cout << "REQUEST_FAILED" << std::endl;
+            continue;
         }
+        std::thread([client = std::move(client), vpn, dns, host, expected, scope]() mutable {
+            struct Count {
+                ~Count() {
+                    --active;
+                }
+            } count;
+            bool established = false;
+            try {
+                auto request = parseConnect(readHeader(client.s));
+                if (!constantEqual(request.authorization, expected)) {
+                    wipe(request.authorization);
+                    sendText(client.s, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic "
+                                       "realm=\"MyNEIGE-PoC\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    return;
+                }
+                wipe(request.authorization);
+                if (request.host != host && !(scope == "university" && universityHost(request.host))) {
+                    sendText(client.s, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    return;
+                }
+                // No resolver cache: every new CONNECT is resolved through the VPN.
+                auto resolved = resolveVpn(vpn, dns, request.host);
+                Socket remote;
+                for (auto address : resolved) {
+                    require(!forbiddenDestination(address, vpn), "Forbidden target address");
+                    try {
+                        auto candidate = vpnSocket(vpn, SOCK_STREAM, IPPROTO_TCP);
+                        connectWithin(candidate.s, endpoint(address, 443));
+                        reportFlow("WEB", "TCP", candidate.s, address, 443);
+                        remote = std::move(candidate);
+                        break;
+                    } catch (const std::exception &) { /* Next A record, still bound to the same tunnel. */
+                    }
+                }
+                require(remote.s != INVALID_SOCKET, "Target unreachable through VPN");
+                sendText(client.s, "HTTP/1.1 200 Connection Established\r\n\r\n");
+                established = true;
+                tunnel(client.s, remote.s);
+            } catch (const std::exception &) {
+                if (!established) {
+                    try {
+                        sendText(client.s,
+                                 "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    } catch (...) {
+                    }
+                }
+                std::osyncstream(std::cout) << "REQUEST_FAILED" << std::endl;
+            }
+        }).detach();
     }
 }
 int blockedProbe(uint16_t port, bool ipv6, bool bound) {

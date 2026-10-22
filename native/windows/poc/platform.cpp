@@ -35,6 +35,7 @@ std::vector<Adapter> adapters() {
             item.address = ntohl(reinterpret_cast<sockaddr_in *>(address->Address.lpSockaddr)->sin_addr.S_un.S_addr);
             item.preferred = address->DadState == IpDadStatePreferred;
             item.name = utf8(p->FriendlyName);
+            item.guid = p->AdapterName;
             for (auto dns = p->FirstDnsServerAddress; dns; dns = dns->Next)
                 if (dns->Address.lpSockaddr->sa_family == AF_INET)
                     item.dns.push_back(
@@ -80,6 +81,7 @@ Adapter idleAdapterByName(const std::wstring &name) {
             result.index = p->IfIndex;
             result.luid = p->Luid.Value;
             result.name = utf8(name);
+            result.guid = p->AdapterName;
             require(result.index && result.luid, "Dedicated TAP identity unavailable");
             return result;
         }
@@ -88,6 +90,7 @@ Adapter idleAdapterByName(const std::wstring &name) {
 Socket vpnSocket(const Adapter &adapter, int type, int protocol) {
     auto current = adapterFor(adapter.address);
     require(current.index == adapter.index && current.luid == adapter.luid, "Tunnel interface generation changed");
+    require(current.name == adapter.name && current.guid == adapter.guid, "Tunnel adapter name or GUID changed");
     Socket result(socket(AF_INET, type, protocol));
     require(result.s != INVALID_SOCKET, "Cannot create tunnel socket");
     DWORD index = htonl(adapter.index);
@@ -117,6 +120,7 @@ std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint3
             require(connect(socket.s, reinterpret_cast<sockaddr *>(&destination), sizeof(destination)) == 0,
                     "DNS UDP connect failed");
             stage = "UDP_SEND";
+            reportFlow("DNS", "UDP", socket.s, server, 53);
             sendAll(socket.s, query.data(), query.size());
             Bytes packet(65535);
             stage = "UDP_RECEIVE";
@@ -132,6 +136,7 @@ std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint3
             stage = "TCP_BIND_CONNECT";
             auto tcp = vpnSocket(adapter, SOCK_STREAM, IPPROTO_TCP);
             connectWithin(tcp.s, destination, 5000);
+            reportFlow("DNS", "TCP", tcp.s, server, 53);
             unsigned char size[2]{static_cast<unsigned char>(query.size() >> 8),
                                   static_cast<unsigned char>(query.size() & 255)};
             stage = "TCP_SEND";
@@ -161,6 +166,43 @@ std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint3
         }
     }
     throw std::runtime_error("All VPN DNS servers failed; no system-DNS fallback was attempted");
+}
+void reportFlow(const char *role, const char *protocol, SOCKET socket, uint32_t destination, uint16_t port) {
+    sockaddr_in local{};
+    int length = sizeof(local);
+    require(getsockname(socket, reinterpret_cast<sockaddr *>(&local), &length) == 0, "Cannot inspect flow source");
+    std::osyncstream(std::cout) << "VPN_FLOW role=" << role << " protocol=" << protocol
+                                << " source=" << ipText(ntohl(local.sin_addr.S_un.S_addr)) << ":"
+                                << ntohs(local.sin_port) << " destination=" << ipText(destination) << ":" << port
+                                << std::endl;
+}
+std::vector<uint32_t> resolveVpnTcp(const Adapter &adapter, const std::vector<uint32_t> &servers,
+                                    const std::string &host) {
+    require(!servers.empty() && servers.size() <= 4, "Verified VPN DNS servers required for TCP test");
+    for (auto server : servers) {
+        try {
+            auto query = dnsQuery(host, static_cast<uint16_t>(std::stoul(randomHex(2), nullptr, 16)));
+            uint16_t id = static_cast<uint16_t>((query[0] << 8) | query[1]);
+            auto socket = vpnSocket(adapter, SOCK_STREAM, IPPROTO_TCP);
+            connectWithin(socket.s, endpoint(server, 53), 5000);
+            reportFlow("DNS", "TCP", socket.s, server, 53);
+            unsigned char length[2]{static_cast<unsigned char>(query.size() >> 8),
+                                    static_cast<unsigned char>(query.size() & 255)};
+            sendAll(socket.s, length, 2);
+            sendAll(socket.s, query.data(), query.size());
+            recvAll(socket.s, length, 2);
+            const size_t size = (length[0] << 8) | length[1];
+            require(size >= 12, "DNS TCP response too short");
+            Bytes response(size);
+            recvAll(socket.s, response.data(), response.size());
+            bool truncated = false;
+            auto result = dnsParse(response, id, host, truncated);
+            require(!truncated, "DNS TCP response truncated");
+            return result;
+        } catch (const std::exception &) {
+        }
+    }
+    throw std::runtime_error("VPN DNS TCP test failed; no fallback outside tunnel");
 }
 static std::string sockaddrText(const SOCKADDR_INET &address) {
     if (address.si_family == AF_INET)
@@ -290,24 +332,39 @@ void Child::stop() {
 }
 std::string Child::line(DWORD milliseconds) {
     auto deadline = GetTickCount64() + milliseconds;
-    std::string line;
     while (GetTickCount64() < deadline) {
+        auto result = pollLine();
+        if (!result.empty())
+            return result;
+        require(running(), "Child process exited before readiness");
+        Sleep(10);
+    }
+    throw std::runtime_error("Child readiness timed out");
+}
+std::string Child::pollLine() {
+    for (;;) {
         DWORD available = 0;
-        require(PeekNamedPipe(output.h, nullptr, 0, nullptr, &available, nullptr) != 0, "Child control pipe closed");
+        if (!PeekNamedPipe(output.h, nullptr, 0, nullptr, &available, nullptr)) {
+            WaitForSingleObject(process.h, 200);
+            DWORD code = 0;
+            GetExitCodeProcess(process.h, &code);
+            throw std::runtime_error("Child control pipe closed (process exit " + std::to_string(code) + ")");
+        }
         if (available) {
             char c = 0;
             DWORD got = 0;
             require(ReadFile(output.h, &c, 1, &got, nullptr) && got, "Child pipe read failed");
-            if (c == '\n')
-                return trim(line);
-            line += c;
-            require(line.size() < 8192, "Child control line too large");
+            if (c == '\n') {
+                auto result = trim(pendingOutput);
+                wipe(pendingOutput);
+                return result;
+            }
+            pendingOutput += c;
+            require(pendingOutput.size() < 16384, "Child control line too large");
         } else {
-            require(running(), "Child process exited before readiness");
-            Sleep(10);
+            return {};
         }
     }
-    throw std::runtime_error("Child readiness timed out");
 }
 Job::Job() : handle(CreateJobObjectW(nullptr, nullptr)) {
     require(handle.h != nullptr, "Cannot create process job");
@@ -316,7 +373,22 @@ Job::Job() : handle(CreateJobObjectW(nullptr, nullptr)) {
     require(SetInformationJobObject(handle.h, JobObjectExtendedLimitInformation, &info, sizeof(info)) != 0,
             "Cannot enable kill-on-close job");
 }
-Child Job::spawn(const std::wstring &executable, const std::vector<std::wstring> &args, bool captureOutput) {
+void Job::terminate() {
+    require(TerminateJobObject(handle.h, 1) != 0, "Cannot stop supervised process tree");
+    auto deadline = GetTickCount64() + 10000;
+    for (;;) {
+        JOBOBJECT_BASIC_ACCOUNTING_INFORMATION info{};
+        require(
+            QueryInformationJobObject(handle.h, JobObjectBasicAccountingInformation, &info, sizeof(info), nullptr) != 0,
+            "Cannot verify stopped process tree");
+        if (info.ActiveProcesses == 0)
+            return;
+        require(GetTickCount64() < deadline, "Supervised descendants are still active; firewall retained");
+        Sleep(50);
+    }
+}
+Child Job::spawn(const std::wstring &executable, const std::vector<std::wstring> &args, bool captureOutput,
+                 bool restricted) {
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
     HANDLE read = nullptr, write = nullptr;
     require(CreatePipe(&read, &write, &sa, 0) != 0, "Cannot create input pipe");
@@ -354,15 +426,22 @@ Child Job::spawn(const std::wstring &executable, const std::vector<std::wstring>
     info.StartupInfo.hStdInput = inputRead.h;
     info.StartupInfo.hStdOutput = outputWrite.h;
     info.StartupInfo.hStdError = outputWrite.h;
+    info.StartupInfo.lpDesktop = const_cast<wchar_t *>(L"winsta0\\default");
     info.lpAttributeList = list;
     std::wstring command = quoteArgument(executable);
     for (auto &arg : args)
         command += L" " + quoteArgument(arg);
     PROCESS_INFORMATION process{};
-    require(CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE,
-                           CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr, nullptr,
-                           &info.StartupInfo, &process) != 0,
-            "Cannot start child process");
+    const DWORD flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT;
+    Handle token;
+    if (restricted)
+        token = restrictedToken();
+    BOOL started = restricted ? CreateProcessAsUserW(token.h, executable.c_str(), command.data(), nullptr, nullptr,
+                                                     TRUE, flags, nullptr, nullptr, &info.StartupInfo, &process)
+                              : CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE, flags,
+                                               nullptr, nullptr, &info.StartupInfo, &process);
+    if (!started)
+        wincheck(GetLastError(), "Cannot start supervised child");
     Child result;
     result.process = Handle(process.hProcess);
     result.pid = process.dwProcessId;
@@ -401,7 +480,10 @@ static void verifyProtectedDirectory(const std::filesystem::path &directory) {
     require(CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, adminBuffer, &length) != 0 &&
                 EqualSid(owner, adminBuffer),
             "Staging owner must be Administrators; refusing existing directory");
-    require(dacl && dacl->AceCount == 2, "Unexpected staging ACL");
+    require(dacl && (dacl->AceCount == 2 || dacl->AceCount == 3), "Unexpected staging ACL");
+    PSID userSid = nullptr;
+    require(ConvertStringSidToSidW(currentUserSid().c_str(), &userSid) != 0, "Cannot decode staging user SID");
+    std::unique_ptr<void, decltype(&LocalFree)> userCleanup(userSid, LocalFree);
     BYTE systemBuffer[SECURITY_MAX_SID_SIZE];
     length = sizeof(systemBuffer);
     require(CreateWellKnownSid(WinLocalSystemSid, nullptr, systemBuffer, &length) != 0, "Cannot create SYSTEM SID");
@@ -410,10 +492,14 @@ static void verifyProtectedDirectory(const std::filesystem::path &directory) {
         void *ace = nullptr;
         require(GetAce(dacl, i, &ace) != 0, "Cannot inspect ACL");
         auto allowed = static_cast<ACCESS_ALLOWED_ACE *>(ace);
-        require(allowed->Header.AceType == ACCESS_ALLOWED_ACE_TYPE &&
-                    (allowed->Mask & FILE_ALL_ACCESS) == FILE_ALL_ACCESS,
-                "Unexpected staging ACE");
+        require(allowed->Header.AceType == ACCESS_ALLOWED_ACE_TYPE, "Unexpected staging ACE type");
         auto sid = &allowed->SidStart;
+        if (EqualSid(sid, userSid)) {
+            require((allowed->Mask & ~(FILE_GENERIC_READ | FILE_GENERIC_EXECUTE)) == 0,
+                    "Staging user must have read/execute access only");
+            continue;
+        }
+        require((allowed->Mask & FILE_ALL_ACCESS) == FILE_ALL_ACCESS, "Unexpected staging administrative ACE");
         if (EqualSid(sid, adminBuffer))
             admin = true;
         else if (EqualSid(sid, systemBuffer))
@@ -456,10 +542,36 @@ Staging::Staging() {
 }
 Staging::~Staging() {
     if (!directory.empty() && !std::filesystem::exists(directory / L"tap-name.txt")) {
+        try {
+            removeProtectedTree(directory / L"browser", directory);
+        } catch (...) {
+            return;
+        }
         DeleteFileW(executable.c_str());
         DeleteFileW(profile.c_str());
         RemoveDirectoryW(directory.c_str());
     }
+}
+void removeProtectedTree(const std::filesystem::path &path, const std::filesystem::path &sessionRoot) {
+    const auto parent = std::filesystem::absolute(sessionRoot).lexically_normal();
+    const auto target = std::filesystem::absolute(path).lexically_normal();
+    auto relative = target.lexically_relative(parent);
+    require(!relative.empty() && !relative.is_absolute() && *relative.begin() == L"browser",
+            "Refusing deletion outside the protected browser session directory");
+    if (!std::filesystem::exists(target))
+        return;
+    verifyProtectedDirectory(target);
+    if (std::filesystem::is_directory(target))
+        for (const auto &entry : std::filesystem::directory_iterator(target))
+            removeProtectedTree(entry.path(), parent);
+    require(std::filesystem::remove(target), "Cannot remove owned browser resource");
+}
+void Staging::allowUserRead() {
+    grantUserRead(directory.parent_path());
+    grantUserRead(directory);
+    grantUserRead(executable);
+    verifyProtectedDirectory(directory);
+    verifyProtectedDirectory(executable);
 }
 void removeOwnedTap(Job &job, const std::filesystem::path &tool, const std::wstring &name) {
     require(name.size() == 44 && name.rfind(L"MyNEIGE-PoC-", 0) == 0 &&
@@ -505,6 +617,7 @@ void recoverStaging() {
         }
         DeleteFileW((entry.path() / L"relay.exe").c_str());
         DeleteFileW((entry.path() / L"client.ovpn").c_str());
+        removeProtectedTree(entry.path() / L"browser", entry.path());
         RemoveDirectoryW(entry.path().c_str());
     }
 }
@@ -524,8 +637,8 @@ static FWPM_FILTER_CONDITION0 interfaceCondition(uint64_t *luid) {
     c.conditionValue.uint64 = luid;
     return c;
 }
-static void addFilter(HANDLE engine, const GUID &layer, FWP_ACTION_TYPE action, UINT8 weight,
-                      std::vector<FWPM_FILTER_CONDITION0> conditions, const wchar_t *name) {
+static uint64_t addFilter(HANDLE engine, const GUID &layer, FWP_ACTION_TYPE action, UINT8 weight,
+                          std::vector<FWPM_FILTER_CONDITION0> conditions, const wchar_t *name) {
     FWPM_FILTER0 filter{};
     filter.displayData.name = const_cast<wchar_t *>(name);
     filter.providerKey = const_cast<GUID *>(&Provider);
@@ -539,6 +652,7 @@ static void addFilter(HANDLE engine, const GUID &layer, FWP_ACTION_TYPE action, 
     filter.filterCondition = conditions.data();
     UINT64 id = 0;
     wincheck(FwpmFilterAdd0(engine, &filter, nullptr, &id), "Add WFP isolation filter");
+    return id;
 }
 Firewall::Firewall() {
     wincheck(FwpmEngineOpen0(nullptr, RPC_C_AUTHN_WINNT, nullptr, nullptr, &engine),
@@ -618,6 +732,55 @@ void Firewall::allowVpn(const std::wstring &executable, const Adapter &vpn) {
         throw;
     }
     FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+}
+void Firewall::quarantineBrowser(const std::wstring &executable) {
+    require(owns, "Session firewall must precede browser startup");
+    FWP_BYTE_BLOB *app = nullptr;
+    wincheck(FwpmGetAppIdFromFileName0(executable.c_str(), &app), "Read browser app ID");
+    try {
+        for (const auto &layer : {FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWPM_LAYER_ALE_AUTH_CONNECT_V6,
+                                  FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4, FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6})
+            addFilter(engine, layer, FWP_ACTION_BLOCK, 1, {appCondition(app)}, L"Browser network quarantine");
+    } catch (...) {
+        FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+        throw;
+    }
+    FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+}
+void Firewall::allowBrowserProxy(const std::wstring &executable, uint16_t port) {
+    require(owns && port, "Browser proxy permit requires a live session");
+    revokeBrowserProxy(executable);
+    FWP_BYTE_BLOB *app = nullptr;
+    wincheck(FwpmGetAppIdFromFileName0(executable.c_str(), &app), "Read browser proxy app ID");
+    FWPM_FILTER_CONDITION0 address{}, remotePort{}, protocol{};
+    address.fieldKey = FWPM_CONDITION_IP_REMOTE_ADDRESS;
+    address.matchType = FWP_MATCH_EQUAL;
+    address.conditionValue.type = FWP_UINT32;
+    address.conditionValue.uint32 = 0x7f000001;
+    remotePort.fieldKey = FWPM_CONDITION_IP_REMOTE_PORT;
+    remotePort.matchType = FWP_MATCH_EQUAL;
+    remotePort.conditionValue.type = FWP_UINT16;
+    remotePort.conditionValue.uint16 = port;
+    protocol.fieldKey = FWPM_CONDITION_IP_PROTOCOL;
+    protocol.matchType = FWP_MATCH_EQUAL;
+    protocol.conditionValue.type = FWP_UINT8;
+    protocol.conditionValue.uint8 = IPPROTO_TCP;
+    try {
+        browserPermits[executable] = addFilter(engine, FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWP_ACTION_PERMIT, 15,
+                                               {appCondition(app), address, remotePort, protocol},
+                                               L"Browser only to authenticated session proxy");
+    } catch (...) {
+        FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+        throw;
+    }
+    FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+}
+void Firewall::revokeBrowserProxy(const std::wstring &executable) {
+    auto found = browserPermits.find(executable);
+    if (found != browserPermits.end()) {
+        wincheck(FwpmFilterDeleteById0(engine, found->second), "Remove obsolete browser proxy permit");
+        browserPermits.erase(found);
+    }
 }
 void Firewall::clear() {
     HANDLE enumeration = nullptr;
@@ -726,5 +889,25 @@ DWORD tcpOwner(const sockaddr_in &local, const sockaddr_in &remote) {
             return row.dwOwningPid;
     }
     return 0;
+}
+void reportTransport(DWORD pid) {
+    ULONG size = 0;
+    GetExtendedTcpTable(nullptr, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
+    Bytes storage(size);
+    wincheck(GetExtendedTcpTable(storage.data(), &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0),
+             "Inspect VPN transport");
+    auto table = reinterpret_cast<MIB_TCPTABLE_OWNER_PID *>(storage.data());
+    unsigned count = 0;
+    for (DWORD n = 0; n < table->dwNumEntries; ++n) {
+        const auto &row = table->table[n];
+        if (row.dwOwningPid == pid && row.dwState == MIB_TCP_STATE_ESTAB &&
+            ntohs(static_cast<u_short>(row.dwRemotePort)) == 443) {
+            std::cout << "OPENVPN_TRANSPORT source=" << ipText(ntohl(row.dwLocalAddr)) << ":"
+                      << ntohs(static_cast<u_short>(row.dwLocalPort))
+                      << " destination=" << ipText(ntohl(row.dwRemoteAddr)) << ":443" << std::endl;
+            ++count;
+        }
+    }
+    require(count > 0, "Cannot identify established university VPN transport");
 }
 } // namespace neige

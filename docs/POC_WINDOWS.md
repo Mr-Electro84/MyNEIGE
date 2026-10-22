@@ -2,9 +2,9 @@
 
 ## Périmètre
 
-Ce pilote console implémente le premier jalon réseau. Il ne livre ni navigateur final, ni interface de connexion Electron, ni installateur. La requête de validation est un `HEAD` HTTPS vers APPIGS avec WinHTTP et un proxy explicitement configuré. Aucun corps de page étudiante n’est téléchargé ou journalisé. Les redirections ne sont pas suivies : un statut 3xx prouve seulement une réponse HTTPS, pas une connexion ENT réussie.
+Le mode console valide le réseau par `HEAD` HTTPS vers APPIGS avec WinHTTP et un proxy explicite, sans corps de page ni redirection suivie. Le début de J2 ajoute un formulaire Electron et une fenêtre de navigation protégée. Cette dernière charge le site et ses ressources, mais ne journalise que les noms de domaines et statuts des pages, sans contenu ni paramètres d’URL. Un statut 3xx ne démontre pas une connexion ENT réussie. Aucun installateur ni interface finale n’est livré.
 
-Le pilote exige des droits administrateur pour OpenVPN, l’interface, les routes et WFP. Le relais s’exécute actuellement sous le jeton élevé du contrôleur ; l’abaissement de ses privilèges et le confinement des processus Electron restent à réaliser avant une application utilisable. Cette limite fait partie du verdict, pas d’une promesse de sécurité déjà acquise.
+Le contrôleur exige des droits administrateur pour OpenVPN, l’interface, les routes et WFP. Le relais et Electron tournent avec un jeton restreint de niveau moyen, sans droits administrateur actifs. Leur image est protégée en écriture ; la quarantaine précède leur démarrage. Voir la [décision d’architecture](ARCHITECTURE_WINDOWS.md).
 
 ## Préparer et vérifier sans changer le réseau
 
@@ -93,13 +93,13 @@ Aucun DNS système ou public n’est utilisé comme secours pour les destination
 
 ## Ce que le prototype met en place
 
-1. Copie du relais dans un répertoire de session aléatoire sous `ProgramData\MyNEIGE-PoC`, appartenant aux administrateurs et accessible seulement à eux et à SYSTEM. Pas de règle fondée sur le chemin partagé de `electron.exe`.
+1. Copie du relais et, en mode navigateur, du runtime Electron et des sources dans un répertoire de session aléatoire sous `ProgramData\MyNEIGE-PoC`, appartenant aux administrateurs. SYSTEM et administrateurs peuvent écrire ; le compte de session dispose seulement de lecture/exécution. Pas de règle fondée sur le chemin partagé de `electron.exe`.
 2. Création d’un TAP dédié avec nom aléatoire, mise en quarantaine WFP avant démarrage du VPN, puis sélection explicite par `--dev-node`. Aucun adaptateur VPN existant n’est réutilisé. OpenVPN est contrôlé par management inversé sur un port exclusif aléatoire de boucle locale ; secret de canal par pipe anonyme et vérification du PID du pair.
 3. Profil contrôlé avec `route-noexec`, `route-nopull`, affectation IP par `ip-win32 netsh` pour éviter une dépendance au DHCP sur le TAP confiné, pas de scripts utilisateur ni de DNS global volontairement appliqué.
 4. Relais identifié par son chemin de session et son ACL, bloqué par défaut en IPv4/IPv6. Seule l’adresse source et l’interface IPv4 effectivement confirmées après connexion sont autorisées. Les autres exécutables sont bloqués sur cette interface.
 5. Route VPN IPv4 de très faible priorité (métrique de route 60000). Aucune route physique existante n’est remplacée. Le pilote refuse si le trafic non lié au relais choisirait le tunnel.
 6. DNS natif UDP/TCP et sockets TCP explicitement liés à l’adresse du tunnel et à `IP_UNICAST_IF`. Aucun `getaddrinfo` pour la destination web. Réponses DNS et chaîne CNAME validées.
-7. Proxy CONNECT limité au nom APPIGS et au port 443, authentifié par secret éphémère distinct du mot de passe ENT. Les destinations locales et adresses de l’hôte sont refusées. Un seul flux simultané et des délais bornés limitent ce pilote.
+7. Proxy CONNECT limité au nom APPIGS et au port 443 en console ; le navigateur admet temporairement le domaine universitaire et ses sous-domaines, sur 443 uniquement. Authentification par secret éphémère distinct du mot de passe ENT. Destinations locales et adresses de l’hôte refusées ; au plus 16 flux simultanés et délais bornés.
 8. Refus d’un autre exécutable essayant de lier explicitement sa socket à l’interface VPN (erreur 10013 exigée), HEAD HTTPS avec vérification TLS Windows, rejet d’un client proxy non authentifié, puis fenêtre de captures. Le proxy n’affiche pas son secret.
 9. Arrêt contrôlé d’OpenVPN puis du relais et vérification que les requêtes échouent. Un Windows Job tue les enfants si le contrôleur disparaît.
 
@@ -113,7 +113,42 @@ Attendu : le transport OpenVPN vers le serveur est visible sur l’interface phy
 
 Les captures peuvent contenir des informations sensibles, en particulier sur la boucle locale. Ne pas capturer/publier le contenu management ou une authentification ; conserver les preuves minimales et nettoyées localement.
 
-Un statut HTTPS et des requêtes bloquées après arrêt ne remplacent pas la capture. Le résultat du programme conserve donc `feasibility: not_yet_certified`. Le passage à une conclusion positive demande le rapport de recette réel. Les scénarios Electron, WebRTC et packaging restent non testés dans ce pilote.
+Un statut HTTPS et des requêtes bloquées après arrêt ne remplacent pas la capture. Le résultat du programme conserve donc `feasibility: not_yet_certified`. Le rapport de recette indique séparément les preuves exécutées et les cas encore ouverts.
+
+### Capture reproductible J1
+
+```powershell
+npm run poc:qualify
+npm run poc:analyze
+# Uniquement le scénario normal, fenêtre stable plus longue :
+powershell -NoProfile -File scripts/qualify-j1.ps1 -NormalOnly -Seconds 30
+```
+
+La console UAC demande les identifiants localement pour chaque session. Le scénario complet lance une session normale puis un crash volontaire du contrôleur (code 86), vérifie la mort des enfants et récupère les ressources propres. Ne pas lancer plusieurs recettes simultanément.
+
+Le script refuse de modifier une capture ou des filtres Pktmon préexistants. Il crée ses propres filtres, capture au plus 96 octets par paquet pour DNS/443/STUN/ICMP, puis exporte les composants physiques et TAP. Les ports éphémères du management et du proxy ne sont pas sélectionnés. Les captures restent sensibles et locales, dans `.local/j1/`, exclu de Git ; ne pas les publier sans examen.
+
+Le témoin indépendant est `curl.exe`, sans proxy ni adresse/interface source forcée, vers la même destination. Son port source choisi sert uniquement au rapprochement des paquets. Une preuve physique après fermeture ne remplace pas la preuve pendant le VPN actif. L’analyse exige cette dernière, les DNS UDP/TCP et le transport VPN positivement observés, zéro flux interdit identifié, zéro événement perdu et les routes/DNS restaurés.
+
+Les composants Pktmon de type filtre NDIS ne sont pas des cartes physiques. L’analyse utilise les Miniport et les GUID ; elle gère aussi les trames Wi-Fi natives que l’export Pktmon étiquette Ethernet sur cette machine. Les nombres de paquets sont des observations par composant, pas un comptage dédupliqué des échanges.
+
+## Début de J2 : formulaire et navigateur
+
+```powershell
+npm ci
+npm run browser:test
+npm start
+```
+
+Le précontrôle sans identifiants vérifie des serveurs locaux positivement testés : refus TCP IPv4/IPv6, absence effective de datagrammes UDP reçus, enfant Electron bloqué, renderer sans Node et accès au seul port proxy permis. Un retour « envoi UDP réussi » côté Node n’est pas pris pour une preuve de livraison.
+
+Il exerce aussi Chromium lui-même contre un proxy local fictif : `407`, authentification et début TLS, puis fermeture volontaire, sans contacter de site distant. La capture d’aperçu du formulaire est facultative : le compositeur peut refuser une capture de fenêtre masquée ; les contrôles réseau et sandbox restent obligatoires.
+
+`npm start` lance un contrôleur élevé masqué, puis un formulaire Electron non administrateur. Saisir le compte VPN dans ce formulaire. Le pipe nommé est authentifié par le PID du processus supervisé avant tout échange de secret. La fenêtre APPIGS n’apparaît qu’après `CONNECTED`, vérification de l’identité GUID/nom/LUID/index/IP, DNS et HEAD HTTPS. La session web est en mémoire, sans bridge natif ; les vérifications TLS restent actives.
+
+Les popups universitaires restent dans la session protégée. Les autres domaines, schémas, ports, téléchargements et permissions sont refusés. La liste de domaines est provisoire et doit être resserrée après le parcours réel ENT/CAS. Fermer le formulaire ou cliquer « Fermer la session » termine la session ; durée maximale 30 minutes. Les diagnostics sont dans `.local/browser/live-session.txt` et le code final dans `exit-code.txt`. Les fichiers de travail Chromium sont sous `.local/browser-data/` ; aucune promesse d’effacement de toutes les copies mémoire ou de la pagination OS.
+
+Le lanceur reste actif jusqu’à la fin du contrôleur. Ce prototype est qualifié avec élévation UAC du même compte Windows ; l’élévation avec les identifiants d’un autre administrateur depuis un compte standard n’est pas qualifiée.
 
 ## Arrêt, crash et récupération
 
@@ -129,10 +164,10 @@ La récupération lit le journal d’identité du TAP dans le répertoire proté
 
 ## Limites avant le jalon suivant
 
-- Validation du moteur, du pilote et du serveur réel indispensable.
+- Recette sur d’autres machines et configurations indispensable.
 - Tests WFP de quarantaine IPv4/IPv6 distincts d’une recette complète du filtrage tunnel.
-- IPv6 du relais bloqué ; aucun navigateur Electron ni parcours ENT/CAS lancé.
-- Pas encore de séparation des privilèges du relais, de test des processus Electron ni de support MFA.
+- IPv6 applicatif bloqué ; les sondes UDP ne remplacent pas une recette WebRTC/HTTP3 complète.
+- Parcours ENT/CAS et MFA encore à qualifier ; pas de reconnexion automatique ni de stockage du mot de passe.
 - Réseau hôte instable, adaptateur préexistant ou VPN tiers modifiant les routes : arrêt conservateur possible.
 - Les routes connectées créées lors de l’affectation de l’IP VPN peuvent entrer en conflit avec un réseau local existant. Le filtrage empêche son utilisation par les applications tierces ; l’absence d’impact transitoire pendant l’initialisation reste à mesurer, et tout conflit interdit la validation du modèle de routage.
 - Tests réseau manuels encore nécessaires pour les interfaces, crashs et changements de route ; ne pas annoncer ces cas réussis avec les seuls tests de protocole.

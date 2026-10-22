@@ -1,0 +1,28 @@
+#pragma once
+#include "platform.hpp"
+namespace neige {
+struct PushOptions {
+    std::vector<uint32_t> dns;
+    uint32_t gateway = 0;
+    bool unsupportedDnsPolicy = false;
+    void observe(const std::string &managementLine);
+};
+bool isCipherFailure(const std::string &line);
+std::string safeDiagnostic(const std::string &line);
+struct Options {
+    std::filesystem::path profile = L"VPN_Universite_Avignon.ovpn";
+    std::filesystem::path openvpn = L"C:\\Program Files\\OpenVPN\\bin\\openvpn.exe";
+    std::vector<uint32_t> dns;
+    uint32_t gateway = 0;
+    unsigned seconds = 30;
+    bool authenticationProbe = false;
+    bool localManagementTest = false;
+};
+int relayWorker();
+int blockedProbe(uint16_t port, bool ipv6 = false, bool bound = false);
+int wfpTest();
+int adapterTest(const Options &options);
+int connectSession(const Options &options);
+int inspect(const Options &options);
+Handle sessionMutex();
+} // namespace neige

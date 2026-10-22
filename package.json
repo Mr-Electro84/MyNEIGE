@@ -1,0 +1,28 @@
+{
+  "name": "myneige",
+  "version": "1.0.0",
+  "description": "Pilote Windows pour un acces universitaire via OpenVPN isole",
+  "homepage": "https://github.com/Mr-Electro84/MyNEIGE#readme",
+  "bugs": {
+    "url": "https://github.com/Mr-Electro84/MyNEIGE/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mr-Electro84/MyNEIGE.git"
+  },
+  "license": "Apache-2.0",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "poc:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-poc.ps1",
+    "poc:inspect": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-poc.ps1 -Mode inspect",
+    "poc:wfp-test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-wfp.ps1 -Elevate",
+    "poc:connect": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-poc.ps1 -Mode connect",
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-poc.ps1",
+    "poc:live": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-live-poc.ps1"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0"
+  }
+}

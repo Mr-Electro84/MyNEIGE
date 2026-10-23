@@ -5,6 +5,10 @@ int wmain(int argc, wchar_t **argv) {
     try {
         std::cout << std::unitbuf;
         std::string command = argc > 1 ? neige::utf8(argv[1]) : "help";
+        if (command == "setup-capabilities") {
+            std::cout << "MYNEIGE_SETUP_PROTOCOL=1\n";
+            return 0;
+        }
         if (command == "vault-worker")
             return neige::vaultWorker();
         if (command == "vault-self-test")

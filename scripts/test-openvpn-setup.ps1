@@ -7,6 +7,45 @@ $setup = Join-Path $PSScriptRoot 'openvpn-setup.ps1'
 . (Join-Path $PSScriptRoot 'openvpn-driver-store.ps1')
 $checks = 0
 function Assert-Setup([bool]$Ok, [string]$Message) { if (!$Ok) { throw $Message }; $script:checks++ }
+# Old builds returned help/code 2 instead of executing openvpn-check. Reproduce
+# that contract without modifying the installed engine or launching an MSI.
+$legacy = [pscustomobject]@{ Code = 2; Output = 'MyNEIGE Windows network pilot' }
+$supported = [pscustomobject]@{ Code = 0; Output = 'MYNEIGE_SETUP_PROTOCOL=1' }
+function Invoke-CheckerScenario($Initial, [bool]$AllowBuild, $After = $supported) {
+    $state = @{ Current = $Initial; Builds = 0; Probes = 0 }
+    $probe = { $state.Probes++; return $state.Current }.GetNewClosure()
+    $build = { $state.Builds++; $state.Current = $After }.GetNewClosure()
+    $errorMessage = ''
+    try { Confirm-OpenVpnNativeChecker -Probe $probe -Build $build -AllowBuild $AllowBuild }
+    catch { $errorMessage = $_.Exception.Message }
+    return [pscustomobject]@{ State = $state; Error = $errorMessage }
+}
+$case = Invoke-CheckerScenario $legacy $false
+Assert-Setup ($case.Error -like '*Pilote natif MyNEIGE*obsolete*' -and $case.State.Builds -eq 0) 'Readonly diagnosis must report the stale MyNEIGE checker without compiling.'
+$case = Invoke-CheckerScenario $legacy $true
+Assert-Setup ($case.Error -eq '' -and $case.State.Builds -eq 1 -and $case.State.Probes -eq 2) 'A stale checker must be rebuilt once and verified again before preparation.'
+$case = Invoke-CheckerScenario $supported $true
+Assert-Setup ($case.Error -eq '' -and $case.State.Builds -eq 0) 'A current checker must not trigger compilation.'
+$case = Invoke-CheckerScenario $legacy $true $legacy
+Assert-Setup ($case.Error -like '*npm run poc:build*' -and $case.State.Builds -eq 1) 'A rebuild that still produces an incompatible checker must stop preparation.'
+$case = Invoke-CheckerScenario ([pscustomobject]@{ Code = -1; Output = '' }) $true
+Assert-Setup ($case.Error -eq '' -and $case.State.Builds -eq 1) 'A missing native checker must be built before preparation.'
+$case = Invoke-CheckerScenario ([pscustomobject]@{ Code = 1; Output = 'MYNEIGE_SETUP_PROTOCOL=1' }) $false
+Assert-Setup ($case.Error -ne '') 'A protocol marker with failure exit code cannot be accepted.'
+$buildError = ''
+try { Confirm-OpenVpnNativeChecker -Probe { $legacy } -Build { throw 'Build Tools fixture missing' } -AllowBuild $true }
+catch { $buildError = $_.Exception.Message }
+Assert-Setup ($buildError -eq 'Build Tools fixture missing') 'A compilation failure must stop preparation and preserve its cause.'
+Assert-Setup (Test-OpenVpnNativeResult ([pscustomobject]@{ Code = 0; Output = 'OPENVPN_COMPATIBLE' })) 'Native success requires both the exit code and the success marker.'
+Assert-Setup (!(Test-OpenVpnNativeResult ([pscustomobject]@{ Code = 1; Output = 'ERROR: OpenVPN signature rejected' }))) 'A real native signature rejection must remain a rejection.'
+foreach ($invalid in @($legacy, [pscustomobject]@{ Code = 0; Output = '' }, [pscustomobject]@{ Code = 1; Output = 'OPENVPN_COMPATIBLE' }, [pscustomobject]@{ Code = -1073741515; Output = '' })) {
+    $errorMessage = ''
+    try { $null = Test-OpenVpnNativeResult $invalid } catch { $errorMessage = $_.Exception.Message }
+    Assert-Setup ($errorMessage -like '*verificateur natif MyNEIGE*') 'A command/protocol/runtime failure cannot be reported as an invalid OpenVPN signature.'
+}
+$binary = Join-Path $root '.local\poc\myneige-poc.exe'
+$protocol = Invoke-OpenVpnNativeCommand -Binary $binary -Arguments @('setup-capabilities')
+Assert-Setup ($protocol.Code -eq 0 -and $protocol.Output -ceq 'MYNEIGE_SETUP_PROTOCOL=1') 'The real native checker must implement the expected setup protocol. Run npm run poc:build first.'
 $missing = Get-OpenVpnDecision -TapReady $false
 Assert-Setup ($missing.State -eq 'Missing') 'An empty inventory must offer installation.'
 $incomplete = Get-OpenVpnDecision -Registered @([pscustomobject]@{ DisplayName = 'OpenVPN' }) -TapReady $false
@@ -78,6 +117,8 @@ try {
     $diagnostic = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
     Assert-Setup ($diagnostic.Status -eq 'Error' -and $diagnostic.Stage -eq 'Verification paquet' -and $diagnostic.Message -like '*Empreinte*') 'The launcher must receive the actual failure reason.'
     Assert-Setup (($output | Out-String) -match 'OPENVPN_SETUP_ERROR stage=Verification paquet line=\d+ type=') 'The diagnostic must preserve the failure location and exception type.'
+    $nativeRejection = Invoke-OpenVpnNativeCommand -Binary $binary -Arguments @('openvpn-check','--openvpn',$fixture)
+    Assert-Setup (!(Test-OpenVpnNativeResult $nativeRejection) -and $nativeRejection.Output -like 'ERROR:*') 'The real native checker must still reject an unsigned synthetic engine.'
     $cached = Join-Path $root '.local\downloads\OpenVPN-2.7.8-I001-amd64.msi'
     if (Test-Path -LiteralPath $cached) {
         $product = Get-OpenVpnMsiProductCode $cached

@@ -50,7 +50,6 @@ function Get-OpenVpnState {
     foreach ($entry in $registered) { if ($entry.InstallLocation) { $candidates += Join-Path $entry.InstallLocation 'bin\openvpn.exe' } }
     $existing = @($candidates | Select-Object -Unique | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     $validated = @(); $partial = @(); $probeResults = @()
-    if ($existing.Count -and !(Test-Path -LiteralPath $binary)) { throw 'Compiler le pilote avant de verifier les fichiers OpenVPN existants.' }
     foreach ($candidate in $existing) {
         if (!(Test-Path -LiteralPath (Join-Path (Split-Path -Parent $candidate) 'tapctl.exe') -PathType Leaf)) {
             $signature = Get-AuthenticodeSignature -LiteralPath $candidate
@@ -59,13 +58,12 @@ function Get-OpenVpnState {
                 $version.FileMajorPart -eq 2 -and $version.FileMinorPart -eq 7 -and $version.FileBuildPart -ge 8) { $partial += $candidate }
             continue
         }
-        $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        $probeOutput = & $binary openvpn-check --openvpn $candidate 2>&1
-        $code = $LASTEXITCODE; $ErrorActionPreference = $previous
-        $probeMessage = (($probeOutput | Out-String) -replace '[\x00-\x1f\x7f]', ' ').Trim()
+        $probe = Invoke-OpenVpnNativeCommand -Binary $binary -Arguments @('openvpn-check','--openvpn',$candidate)
+        $valid = Test-OpenVpnNativeResult $probe
+        $probeMessage = ($probe.Output -replace '[\x00-\x1f\x7f]', ' ').Trim()
         if ($probeMessage.Length -gt 250) { $probeMessage = $probeMessage.Substring(0,250) }
-        $probeResults += ('controle_natif=' + $code + ' fichier=' + $candidate + ' resultat=' + $probeMessage)
-        if ($code -eq 0) { $validated += $candidate }
+        $probeResults += ('controle_natif=' + $probe.Code + ' fichier=' + $candidate + ' resultat=' + $probeMessage)
+        if ($valid) { $validated += $candidate }
     }
     $tapInf = Get-OpenVpnTapDriver
     $decision = Get-OpenVpnDecision -Existing $existing -Validated $validated -Partial $partial -Registered $registered -TapReady ([bool]$tapInf)
@@ -80,6 +78,19 @@ if ($VerifyOnly) {
     $script:setupStage = 'Verification paquet'
     if (!$Package) { throw 'Paquet a verifier manquant.' }
     Test-OfficialPackage $Package; Write-Output 'OPENVPN_PACKAGE_VERIFIED'; exit 0
+}
+if ($Ensure -or $Install -or $CheckOnly -or $Diagnose -or $InstallWorker) {
+    # Detect stale local build products before inventory or any MSI/UAC action.
+    # Diagnostic/check modes and the elevated worker must never compile.
+    $script:setupStage = 'Verification pilote MyNEIGE'
+    Confirm-OpenVpnNativeChecker -AllowBuild (($Ensure -or $Install) -and !$InstallWorker -and !$Diagnose -and !$CheckOnly) -Probe {
+        if (!(Test-Path -LiteralPath $binary -PathType Leaf)) { return [pscustomobject]@{ Code = -1; Output = '' } }
+        Invoke-OpenVpnNativeCommand -Binary $binary -Arguments @('setup-capabilities')
+    } -Build {
+        Write-Host 'MyNEIGE : mise a jour du pilote natif avant verification OpenVPN...'
+        & (Join-Path $PSScriptRoot 'build-poc.ps1')
+    }
+    $script:setupStage = 'Detection'
 }
 if ($Diagnose) {
     # No MSI, adapter, route, VPN or credential operation in this mode.

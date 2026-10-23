@@ -3,8 +3,10 @@ param([switch]$Worker, [switch]$ForgetCredentials, [string]$OpenVpn)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $binary = Join-Path $root '.local\poc\myneige-poc.exe'
-if (!(Test-Path -LiteralPath $binary)) { throw 'Compiler le pilote avant le lancement.' }
-if ($ForgetCredentials) { & $binary vault-forget; exit $LASTEXITCODE }
+if ($ForgetCredentials) {
+    if (!(Test-Path -LiteralPath $binary)) { throw 'Compiler le pilote avant le lancement.' }
+    & $binary vault-forget; exit $LASTEXITCODE
+}
 $out = Join-Path $root '.local\browser'
 New-Item -ItemType Directory -Path $out -Force | Out-Null
 if (!$Worker) {

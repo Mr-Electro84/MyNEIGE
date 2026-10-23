@@ -1,5 +1,35 @@
 # Shared decisions and orchestration. All network, UI and installer effects are
 # supplied by the caller so the missing/incomplete paths can be tested safely.
+function Invoke-OpenVpnNativeCommand {
+    param([string]$Binary, [string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = & $Binary @Arguments 2>&1
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previous }
+    # Windows PowerShell wraps native stderr in ErrorRecord objects. Preserve
+    # the actual message instead of formatting the PowerShell call-site prefix.
+    $message = (@($output | ForEach-Object { $_.ToString() }) -join "`n").Trim()
+    return [pscustomobject]@{ Code = $code; Output = $message }
+}
+function Confirm-OpenVpnNativeChecker {
+    param([scriptblock]$Probe, [scriptblock]$Build, [bool]$AllowBuild = $false)
+    $result = & $Probe
+    if ($result.Code -eq 0 -and $result.Output -ceq 'MYNEIGE_SETUP_PROTOCOL=1') { return }
+    if ($AllowBuild) {
+        & $Build | Out-Host
+        $result = & $Probe
+        if ($result.Code -eq 0 -and $result.Output -ceq 'MYNEIGE_SETUP_PROTOCOL=1') { return }
+    }
+    throw 'Pilote natif MyNEIGE absent, obsolete ou incompatible avec les scripts. Ce resultat ne permet pas de verifier OpenVPN. Fermez MyNEIGE puis lancez npm run poc:build avant de reessayer. Visual Studio Build Tools C++ et Windows SDK sont requis pour compiler le pilote.'
+}
+function Test-OpenVpnNativeResult {
+    param($Result)
+    if ($Result.Code -eq 0 -and $Result.Output -ceq 'OPENVPN_COMPATIBLE') { return $true }
+    if ($Result.Code -eq 1 -and $Result.Output -cmatch '^ERROR: ') { return $false }
+    throw ('Le verificateur natif MyNEIGE ne retourne pas le resultat attendu (code ' + $Result.Code + '). Recompilez le pilote avec npm run poc:build. La signature OpenVPN ne peut pas etre evaluee.')
+}
 function Get-OpenVpnDecision {
     param([string[]]$Existing = @(), [string[]]$Validated = @(), [string[]]$Partial = @(), [object[]]$Registered = @(), [bool]$TapReady)
     if ($Validated.Count -and $TapReady) {

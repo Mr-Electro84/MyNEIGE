@@ -96,6 +96,12 @@ Retour suivant du second PC : le téléchargement réussit, le MSI atteint son c
 
 Correction : interrogation SetupAPI du magasin de pilotes sans création d’adaptateur, avec correspondance exacte des identifiants TAP ; prise en compte des chemins `exe_path`/`bin_dir` du registre OpenVPN. Les contrôles natifs de signature/version sont conservés. La validation finale a lieu dans le parent et préserve le détail du composant en échec au lieu de remonter seulement le code 1 du travailleur élevé. Nouveau mode `-Diagnose` sans installation ni VPN. Sous Windows PowerShell 5.1, les 33 contrôles passent sur le poste de développement et le diagnostic réel renvoie `Ready`, contrôle natif 0 et INF TAP présent. L’utilisateur reporte son nouvel essai ; la reconnaissance et le démarrage sur le second PC après ce dernier correctif restent à confirmer.
 
+Nouveau retour du second PC (« erreurs post installation OpenVPN bis ») : le détail indique `controle_natif=2` et reproduit l’aide de MyNEIGE. Ce résultat révèle un exécutable natif qui ne reconnaît pas la commande `openvpn-check`, et non un échec de vérification cryptographique établi. Les scripts mis à jour utilisaient une ancienne compilation sous `.local/poc`, non reconstruite par le simple lancement du programme.
+
+Correction : protocole explicite de compatibilité scripts/pilote, vérifié avant la détection et avant toute installation. `npm start` et `npm run openvpn:install` reconstruisent un pilote absent/ancien, puis vérifient le nouveau binaire ; les modes diagnostic et le travailleur élevé restent sans compilation. Une réponse native inattendue produit désormais une erreur MyNEIGE distincte d’un refus de signature OpenVPN. Les contrôles de signature, éditeur, version et empreinte restent actifs. Capture stderr adaptée aux objets ErrorRecord de PowerShell 5.1.
+
+Validation locale : compilation MSVC réussie, 48 contrôles de préparation sous Windows PowerShell 5.1, 27 tests natifs et 26 tests Node réussis. Les scénarios d’ancien pilote/reconstruction/échec de compilation sont simulés ; le protocole du nouveau binaire et le refus d’un fichier fictif non signé sont exercés réellement. Le diagnostic de l’installation existante renvoie `Ready`, `OPENVPN_COMPATIBLE` et le paquet TAP présent. Aucun MSI ni VPN lancé pour cette validation. La confirmation après mise à jour et recompilation sur le second PC reste attendue.
+
 ## Environnement et intégrité
 
 - Windows x64 build 26200.9457 ; MSVC 14.44, SDK 10.0.26100.0 ; Electron 45.0.0 épinglé.

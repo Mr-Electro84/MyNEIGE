@@ -1,6 +1,6 @@
 # État de validation du pilote Windows
 
-23 octobre 2026. Ces résultats concernent cette machine et les scénarios effectivement exécutés. J1 dispose maintenant de captures et d’une décision d’architecture ; sa recette complète reste ouverte. J2 a commencé, sans interface finale ni packaging.
+23 octobre 2026. Les essais de l’agent concernent la machine de développement et les scénarios effectivement exécutés ; les retours utilisateur d’un autre poste sont identifiés séparément. J1 dispose maintenant de captures et d’une décision d’architecture ; sa recette complète reste ouverte. J2 a commencé, sans interface finale ni packaging.
 
 ## Résultats acquis
 
@@ -87,6 +87,10 @@ Premier essai utilisateur : enregistrement confirmé explicitement, puis fermetu
 Installation fraîche sur VM sans OpenVPN, redémarrage requis et annulation du MSI/UAC non exécutés. Le lancement retient l’identité du bureau interactif plutôt que celle d’un autre administrateur saisi pour l’UAC ; ce cas avec deux comptes distincts reste à qualifier. Aucun succès n’est attribué à ces scénarios sur la seule base des tests locaux.
 
 Après essai utilisateur suivant une désinstallation, la capture montre un arrêt générique sans proposition d’installation. Le parcours a été corrigé : états absent/incomplet/incompatible séparés, proposition d’installation pour les deux premiers, détection d’architecture indépendante du registre d’environnement, transmission structurée de la cause et de l’étape d’erreur, progression MSI visible et commande `npm run openvpn:install`. Les 22 contrôles PowerShell couvrent l’orchestration avec effets simulés, plus un vrai refus de faux MSI avec résultat JSON et la lecture du code produit du paquet officiel en cache. L’installation compatible présente dans l’environnement de l’agent est toujours reconnue. L’utilisateur indique avoir déjà réinstallé OpenVPN et reporte le nouvel essai d’absence ; le correctif n’est donc pas encore confirmé par une nouvelle installation réelle.
+
+L’utilisateur précise ensuite que les deux signalements d’installation concernent un autre PC. Le changement de chemin du dépôt sur la capture n’est pas retenu comme cause. Son nouveau journal échoue au début du téléchargement. Reproduction exacte sur la machine de développement sous Windows PowerShell 5.1 : l’adresse `swupdate.openvpn.org` provoque `InvalidOperationException` avec « L’opération n’est pas valide en raison de l’état actuel de l’objet » lorsque la redirection est interdite. La réponse HTTP observée séparément est un 301 vers `swupdate.openvpn.net`. L’adresse canonique `.net` télécharge directement le MSI dont l’empreinte correspond à la référence.
+
+Correction : adresse canonique utilisée, refus des redirections maintenu, vérifications SHA-256/signature inchangées et diagnostic enrichi du type et de la ligne de l’exception. Le nouveau test `test-openvpn-setup.ps1 -FreshDownload` part d’un dossier vide et appelle le vrai script sous Windows PowerShell 5.1, sans utiliser le MSI en cache : téléchargement terminé, empreinte attendue, signature valide et nettoyage des fichiers partiels réussis. Les 28 contrôles passent sur ce poste ; aucun MSI n’a été exécuté. L’installation complète sur le second PC reste à confirmer après ce correctif.
 
 ## Environnement et intégrité
 

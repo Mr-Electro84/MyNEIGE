@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param([switch]$Install, [switch]$Ensure, [switch]$CheckOnly, [switch]$VerifyOnly,
-      [switch]$InstallWorker, [string]$Package, [string]$ResultFile)
+      [switch]$InstallWorker, [string]$Package, [string]$ResultFile, [string]$DownloadDirectory)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $filename = 'OpenVPN-2.7.8-I001-amd64.msi'
@@ -16,11 +16,16 @@ function Write-SetupResult([string]$Status, [string]$Path, [string]$Message, [in
 }
 trap {
     $message = $_.Exception.Message
+    $failureLine = $_.InvocationInfo.ScriptLineNumber
+    $failureType = $_.Exception.GetType().FullName
     Write-SetupResult 'Error' '' $message 1
     if ($InstallWorker) {
         Add-Type -AssemblyName System.Windows.Forms
         [Windows.Forms.MessageBox]::Show($message, 'MyNEIGE - Installation OpenVPN', 'OK', 'Error') | Out-Null
     }
+    # Preparation runs before credentials are requested. Keep useful call-site
+    # metadata, but never dump response bodies or arbitrary exception contents.
+    Write-Output ("OPENVPN_SETUP_ERROR stage={0} line={1} type={2}" -f $script:setupStage,$failureLine,$failureType)
     Write-Error -Message $message -ErrorAction Continue
     exit 1
 }
@@ -116,16 +121,19 @@ if ($InstallWorker) {
 }
 function Get-VerifiedPackage {
     $script:setupStage = 'Telechargement et verification'
-    $downloadDirectory = Join-Path $repoRoot '.local\downloads'
-    New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
+    $cacheDirectory = if ($DownloadDirectory) { [IO.Path]::GetFullPath($DownloadDirectory) } else { Join-Path $repoRoot '.local\downloads' }
+    New-Item -ItemType Directory -Path $cacheDirectory -Force | Out-Null
     $selected = $Package
     if (!$selected) {
-        $selected = Join-Path $downloadDirectory $filename
+        $selected = Join-Path $cacheDirectory $filename
         if (!(Test-Path -LiteralPath $selected)) {
             Write-Host 'MyNEIGE : telechargement du paquet officiel OpenVPN...'
-            $partial = Join-Path $downloadDirectory ($filename + '.' + [Guid]::NewGuid().ToString('N') + '.part')
+            $partial = Join-Path $cacheDirectory ($filename + '.' + [Guid]::NewGuid().ToString('N') + '.part')
             try {
-                Invoke-WebRequest -UseBasicParsing -Uri "https://swupdate.openvpn.org/community/releases/$filename" -MaximumRedirection 0 -TimeoutSec 120 -OutFile $partial
+                # .org redirects to .net. Windows PowerShell 5.1 can throw an
+                # opaque InvalidOperationException when refusing that redirect.
+                # Use the canonical HTTPS endpoint and keep redirects forbidden.
+                Invoke-WebRequest -UseBasicParsing -Uri "https://swupdate.openvpn.net/community/releases/$filename" -MaximumRedirection 0 -TimeoutSec 120 -OutFile $partial
                 Test-OfficialPackage $partial
                 Move-Item -LiteralPath $partial -Destination $selected
             } finally { if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial } }

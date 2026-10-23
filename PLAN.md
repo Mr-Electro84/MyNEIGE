@@ -14,6 +14,8 @@ Recette de cette extension : enregistrement réel puis réutilisation après Win
 
 Retour de recette installation : proposition absent/incomplet corrigée après un essai suivant désinstallation ; erreurs détaillées, progression MSI et commande d’installation dédiée ajoutées. Vingt-deux contrôles PowerShell du parcours passent sans exécuter de MSI. La nouvelle installation réelle reste à confirmer séparément.
 
+Les signalements concernent un autre PC. Le journal suivant a permis de reproduire un défaut réel du téléchargement neuf sous Windows PowerShell 5.1 : redirection du serveur `.org` vers `.net` refusée par le script. Adresse canonique corrigée ; test sans cache ajouté, avec téléchargement et validation SHA-256/Authenticode réels (28 contrôles réussis ici), sans exécution du MSI. La confirmation de l’installation complète sur le second poste reste ouverte.
+
 Le code du pilote et son mode d’emploi figurent dans [README.md](README.md) et [docs/POC_WINDOWS.md](docs/POC_WINDOWS.md). Les résultats réellement obtenus sont consignés dans [docs/POC_STATUS.md](docs/POC_STATUS.md). Un prototype compilé ne vaut pas démonstration d’isolation complète.
 
 Le pilote crée un TAP dédié, applique sa quarantaine avant OpenVPN et contrôle les sorties par WFP et liaison explicite des sockets. Le mode console utilise WinHTTP ; le début de J2 ajoute un formulaire et une session Electron protégée. Relais et Electron utilisent désormais des jetons restreints de niveau moyen. Le packaging reste différé.

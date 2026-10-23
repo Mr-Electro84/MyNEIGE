@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([switch]$FreshDownload)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $setup = Join-Path $PSScriptRoot 'openvpn-setup.ps1'
@@ -63,10 +63,37 @@ try {
     if ($code -eq 0) { throw 'An untrusted installer was accepted.' }
     $diagnostic = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
     Assert-Setup ($diagnostic.Status -eq 'Error' -and $diagnostic.Stage -eq 'Verification paquet' -and $diagnostic.Message -like '*Empreinte*') 'The launcher must receive the actual failure reason.'
+    Assert-Setup (($output | Out-String) -match 'OPENVPN_SETUP_ERROR stage=Verification paquet line=\d+ type=') 'The diagnostic must preserve the failure location and exception type.'
     $cached = Join-Path $root '.local\downloads\OpenVPN-2.7.8-I001-amd64.msi'
     if (Test-Path -LiteralPath $cached) {
         $product = Get-OpenVpnMsiProductCode $cached
         Assert-Setup ($product -match '^\{[A-Fa-f0-9-]{36}\}$') 'Signed fixture MSI product lookup failed.'
+    }
+    if ($FreshDownload) {
+        $freshDirectory = Join-Path $root ('.local\setup-download-test-' + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $freshDirectory | Out-Null
+        $freshResult = Join-Path $freshDirectory 'result.json'
+        $freshPackage = Join-Path $freshDirectory 'OpenVPN-2.7.8-I001-amd64.msi'
+        try {
+            Assert-Setup (!(Test-Path -LiteralPath $freshPackage)) 'Fresh download must start without a cached MSI.'
+            $powershell51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            # No -Install / -Ensure: download and verify only, never start MSI/UAC.
+            $downloadOutput = & $powershell51 -NoProfile -ExecutionPolicy Bypass -File $setup -DownloadDirectory $freshDirectory -ResultFile $freshResult 2>&1
+            $downloadCode = $LASTEXITCODE; $ErrorActionPreference = $previous
+            if ($downloadCode -ne 0) { throw ('Fresh Windows PowerShell 5.1 download failed: ' + ($downloadOutput | Out-String)) }
+            $downloadResult = Get-Content -LiteralPath $freshResult -Raw | ConvertFrom-Json
+            Assert-Setup ($downloadResult.Status -eq 'Downloaded') 'Fresh download did not finish verification.'
+            Assert-Setup ((Get-FileHash -LiteralPath $freshPackage -Algorithm SHA256).Hash -eq '1EA61A3056905B90607D4B0F084C04E5CF3043E07CF192D9CD44B0474F29CC49') 'Fresh MSI hash differs from the qualified package.'
+            Assert-Setup ((Get-AuthenticodeSignature -LiteralPath $freshPackage).Status -eq 'Valid') 'Fresh MSI signature is not valid.'
+            Assert-Setup (@(Get-ChildItem -LiteralPath $freshDirectory -Filter '*.part').Count -eq 0) 'Fresh download left an incomplete file.'
+            Write-Output 'OPENVPN_FRESH_DOWNLOAD_TEST windows_powershell_51=true cache_used=false hash=true signature=true installation=false'
+        } finally {
+            # Known, unique workspace fixture only. No recursive delete.
+            foreach ($file in @($freshPackage,$freshResult)) { if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file } }
+            foreach ($partialFile in @(Get-ChildItem -LiteralPath $freshDirectory -Filter '*.part' -File)) { Remove-Item -LiteralPath $partialFile.FullName }
+            Remove-Item -LiteralPath $freshDirectory
+        }
     }
     Write-Output "OPENVPN_SETUP_TEST checks=$checks missing_offer=true incomplete_offer=true cancellation=true reboot=true precise_errors=true no_installation=true"
 } finally {

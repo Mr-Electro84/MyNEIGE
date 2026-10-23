@@ -25,6 +25,9 @@ void BrowserPilot::prepare(const Staging &staging, const std::filesystem::path &
     copyReadOnlyTree(root / L"src", browser / L"app");
     executable = browser / L"runtime/electron.exe";
     entry = browser / L"app/main/index.js";
+    vault = staging.directory / L"myneige-vault.exe";
+    require(CopyFileW(imagePath().c_str(), vault.c_str(), TRUE), "Cannot prepare protected credential helper");
+    grantUserRead(vault);
     userData = root / L".local/browser-data" / staging.directory.filename();
 }
 static Socket listener6(uint16_t &port) {
@@ -139,6 +142,7 @@ std::string BrowserPilot::wait(DWORD milliseconds) {
 }
 void BrowserPilot::launch(Firewall &firewall, bool selfTest) {
     firewall.quarantineBrowser(executable.wstring());
+    firewall.quarantineBrowser(vault.wstring());
     uint16_t port4 = 0, port6 = 0;
     auto control4 = loopbackListener(port4);
     auto control6 = listener6(port6);
@@ -358,6 +362,9 @@ int browserTest(const std::filesystem::path &projectRoot) {
         firewall.install(staging.executable.wstring(), nullptr);
         browser.prepare(staging, projectRoot);
         browser.launch(firewall, true);
+        browser.send("TEST_VAULT\n");
+        require(browser.wait(30000) == "UI_VAULT_TEST_DONE", "Native credential helper integration failed");
+        std::cout << "BROWSER_VAULT_TEST helper=true status_only=true" << std::endl;
         browser.proxyTest(firewall);
         browser.send("TEST_CAS_PREFILL\n");
         require(browser.wait(30000) == "UI_CAS_TEST_DONE", "CAS prefill integration tests failed");

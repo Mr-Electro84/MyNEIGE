@@ -3,6 +3,9 @@
 #include <tlhelp32.h>
 
 namespace neige {
+static Handle interactiveToken;
+static std::wstring interactiveSid;
+static bool useInteractiveToken = false;
 static Handle processToken(HANDLE process, DWORD access) {
     HANDLE raw = nullptr;
     require(OpenProcessToken(process, access, &raw) != 0, "Cannot open process token");
@@ -40,6 +43,8 @@ void protectSupervisor() {
              "Protect supervisor process");
 }
 std::wstring currentUserSid() {
+    if (!interactiveSid.empty())
+        return interactiveSid;
     auto token = processToken(GetCurrentProcess(), TOKEN_QUERY);
     auto data = tokenInfo(token.h, TokenUser);
     LPWSTR text = nullptr;
@@ -49,6 +54,31 @@ std::wstring currentUserSid() {
     LocalFree(text);
     return result;
 }
+void selectInteractiveUser() {
+    // The shell belongs to the interactive desktop, even if UAC used another
+    // administrator. Never persist the elevated administrator's credentials.
+    DWORD pid = 0, ownSession = 0, shellSession = 0;
+    HWND shell = GetShellWindow();
+    require(shell && GetWindowThreadProcessId(shell, &pid), "Interactive desktop user unavailable");
+    require(ProcessIdToSessionId(GetCurrentProcessId(), &ownSession) && ProcessIdToSessionId(pid, &shellSession) &&
+                ownSession == shellSession,
+            "Interactive user belongs to another Windows session");
+    Handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
+    require(process.h != nullptr, "Cannot inspect interactive shell");
+    auto token = processToken(process.h, TOKEN_QUERY | TOKEN_DUPLICATE);
+    HANDLE copy = nullptr;
+    require(DuplicateTokenEx(token.h, TOKEN_ALL_ACCESS, nullptr, SecurityImpersonation, TokenPrimary, &copy),
+            "Cannot retain interactive user token");
+    const auto brokerSid = currentUserSid();
+    interactiveToken = Handle(copy);
+    auto data = tokenInfo(copy, TokenUser);
+    LPWSTR sid = nullptr;
+    require(ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER *>(data.data())->User.Sid, &sid),
+            "Cannot identify interactive user");
+    interactiveSid = sid;
+    LocalFree(sid);
+    useInteractiveToken = interactiveSid != brokerSid;
+}
 Handle restrictedToken() {
     auto own =
         processToken(GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT);
@@ -57,7 +87,8 @@ Handle restrictedToken() {
     require(CreateWellKnownSid(WinBuiltinAdministratorsSid, nullptr, admin, &size) != 0, "Cannot build admin SID");
     SID_AND_ATTRIBUTES disabled{admin, 0};
     HANDLE raw = nullptr;
-    require(CreateRestrictedToken(own.h, DISABLE_MAX_PRIVILEGE, 1, &disabled, 0, nullptr, 0, nullptr, &raw) != 0,
+    require(CreateRestrictedToken(useInteractiveToken ? interactiveToken.h : own.h, DISABLE_MAX_PRIVILEGE, 1, &disabled,
+                                  0, nullptr, 0, nullptr, &raw) != 0,
             "Cannot create non-administrative token");
     Handle token(raw);
     PSID medium = nullptr;

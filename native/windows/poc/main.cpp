@@ -4,8 +4,14 @@
 int wmain(int argc, wchar_t **argv) {
     try {
         std::cout << std::unitbuf;
-        neige::Winsock sockets;
         std::string command = argc > 1 ? neige::utf8(argv[1]) : "help";
+        if (command == "vault-worker")
+            return neige::vaultWorker();
+        if (command == "vault-self-test")
+            return neige::vaultSelfTest();
+        if (command == "vault-forget")
+            return neige::vaultForget();
+        neige::Winsock sockets;
         if (command == "self-test")
             return neige::selfTest();
         if (command == "relay-worker")
@@ -54,6 +60,12 @@ int wmain(int argc, wchar_t **argv) {
         }
         if (command == "inspect")
             return neige::inspect(options);
+        if (command == "openvpn-check") {
+            neige::validateOpenVpn(options.openvpn);
+            neige::validateOpenVpn(options.openvpn.parent_path() / L"tapctl.exe");
+            std::cout << "OPENVPN_COMPATIBLE\n";
+            return 0;
+        }
         if (command == "browser-test")
             return neige::browserTest(options.projectRoot);
         if (command == "browse") {

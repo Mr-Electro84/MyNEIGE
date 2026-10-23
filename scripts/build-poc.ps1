@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 $devCmd = Join-Path $vsRoot 'Common7\Tools\VsDevCmd.bat'
 $sourceRoot = Join-Path $repoRoot 'native\windows\poc'
 $sources = Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cpp' | ForEach-Object { '"' + $_.FullName + '"' }
-$compilerArgs = '/nologo /MP2 /std:c++20 /EHsc /W4 /WX /utf-8 /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0A00 /O2 /guard:cf /sdl ' + ($sources -join ' ') + ' /Fe:"myneige-poc.exe" /link /DYNAMICBASE /NXCOMPAT ws2_32.lib iphlpapi.lib fwpuclnt.lib bcrypt.lib advapi32.lib ole32.lib winhttp.lib shell32.lib wintrust.lib crypt32.lib version.lib'
+$compilerArgs = '/nologo /MP2 /std:c++20 /EHsc /W4 /WX /utf-8 /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0A00 /O2 /guard:cf /sdl ' + ($sources -join ' ') + ' /Fe:"myneige-poc.exe" /link /DYNAMICBASE /NXCOMPAT ws2_32.lib iphlpapi.lib fwpuclnt.lib bcrypt.lib advapi32.lib ole32.lib winhttp.lib shell32.lib wintrust.lib crypt32.lib version.lib windowsapp.lib userenv.lib user32.lib'
 $buildScript = Join-Path $buildRoot 'compile.cmd'
 $batch = '@echo off' + "`r`n" + 'call "' + $devCmd + '" -arch=x64 -host_arch=x64 >nul' + "`r`n" + 'if errorlevel 1 exit /b %errorlevel%' + "`r`n" + 'cl.exe ' + $compilerArgs + "`r`n" + 'exit /b %errorlevel%' + "`r`n"
 [IO.File]::WriteAllText($buildScript, $batch, [Text.UTF8Encoding]::new($false))

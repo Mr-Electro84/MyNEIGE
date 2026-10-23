@@ -12,6 +12,7 @@ const { CasPrefill, registerCasIPC } = require('./cas-prefill');
 const { createProtectedWindow } = require('./protected-window');
 const { createDownloads } = require('./downloads');
 const { protectRequests } = require('./session-policy');
+const { NativeVault } = require('./native-vault');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
@@ -38,6 +39,17 @@ const networkErrors = new Set(['ERR_FAILED', 'ERR_ABORTED', 'ERR_BLOCKED_BY_CLIE
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
 let vpnReady = false, downloads;
+let vault, vaultBusy = false, vaultEpoch = 0, rememberPending, rememberTimer;
+function clearRemember() {
+  clearTimeout(rememberTimer); rememberTimer = undefined;
+  rememberPending?.user.fill(0); rememberPending?.password.fill(0); rememberPending = undefined;
+}
+function vaultState(value) { if (form && !form.isDestroyed()) form.webContents.send('myneige:vault-state', value); }
+async function vaultStatus(message) {
+  if (!vault) return { saved: false, hello: false, available: false };
+  try { const status = { ...await vault.status(), available: true, message }; vaultState(status); return status; }
+  catch { const status = { saved: false, hello: false, available: false, message: 'UNAVAILABLE' }; vaultState(status); return status; }
+}
 const prefillOwners = new WeakMap();
 const casPrefill = new CasPrefill({ ready: () => vpnReady && !stopping, report: status => {
   send(`UI_CAS_PREFILL ${status}`);
@@ -124,6 +136,7 @@ async function control(line) {
     const v4 = Number(parts[1]), v6 = Number(parts[2]);
     if (![v4, v6].every(port => Number.isInteger(port) && port > 0 && port <= 65535)) throw new Error('ports');
     testMode = parts[3] === 'test';
+    vault = new NativeVault(path.resolve(__dirname, '../../../myneige-vault.exe'));
     await app.whenReady();
     send('BROWSER_STAGE APP_READY');
     await quarantineTests(v4, v6);
@@ -132,7 +145,7 @@ async function control(line) {
     send('BROWSER_STAGE CHILD_BLOCKED');
     const localSession = session.fromPartition(`form-${Date.now()}`, { cache: false });
     localSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') }));
-    form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', width: 680, height: 940, show: !testMode,
+    form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', width: 700, height: 1040, show: !testMode,
       webPreferences: { session: localSession, preload: path.join(__dirname, '../preload/form.js'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
     send('BROWSER_STAGE FORM_CREATED');
     form.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -140,6 +153,7 @@ async function control(line) {
     form.webContents.on('will-navigate', event => event.preventDefault());
     form.on('closed', () => { form = null; if (!stopping) { send('UI_STOP'); shutdown(); } });
     await form.loadFile(formPath);
+    await vaultStatus();
     send('BROWSER_STAGE FORM_FILE_LOADED');
     if (testMode) {
       // A hidden compositor may refuse screenshots; sandbox and network probes
@@ -168,27 +182,37 @@ async function control(line) {
   } else if (line === 'TEST_CAS_PREFILL' && form && testMode) {
     await require('./cas-prefill-test').run({ session, protectedWindow, CasPrefill });
     send('UI_CAS_TEST_DONE');
+  } else if (line === 'TEST_VAULT' && form && testMode) {
+    const result = await form.webContents.executeJavaScript('window.myneige.vaultStatus()');
+    if (!result.available || typeof result.saved !== 'boolean' || typeof result.hello !== 'boolean' || 'password' in result || 'username' in result) throw new Error('Native vault status integration failed');
+    send('UI_VAULT_TEST_DONE');
   } else if (line === 'TEST_BROWSER_FEATURES' && form && testMode) {
     await require('./browser-features-test').run({ session, CasPrefill, directory: path.join(app.getPath('userData'), 'download-fixtures'),
       protectedWindow: (browserSession, prefiller, fixtureDownloads) => createProtectedWindow({ BrowserWindow,
         session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, show: false }) });
     send('UI_BROWSER_FEATURES_DONE');
   } else if (line === 'AUTH_REQUIRED' && form) {
-    authPending = true; state('AUTH_REQUIRED');
+    authPending = true; state('AUTH_REQUIRED'); void vaultStatus();
   } else if (parts[0] === 'STATE' && parts.length === 2 && ['BLOCKED', 'ERROR', 'CONNECTING'].includes(parts[1])) {
-    if (parts[1] !== 'CONNECTING') { vpnReady = false; casPrefill.clear(); downloads?.stop(); }
+    if (parts[1] !== 'CONNECTING') { vpnReady = false; casPrefill.clear(); clearRemember(); downloads?.stop(); }
     state(parts[1]);
     if (parts[1] === 'BLOCKED' && remote && !remote.isDestroyed()) remote.destroy();
   } else if (parts[0] === 'VPN_READY' && parts.length === 3 && form && !proxySecret) {
     proxyPort = Number(parts[1]); proxySecret = parts[2];
     if (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535 || !/^[a-f0-9]{64}$/.test(proxySecret)) throw new Error('proxy');
     vpnReady = true;
+    if (rememberPending) {
+      const credentials = { username: rememberPending.user.toString('utf8'), password: rememberPending.password.toString('utf8') };
+      clearRemember();
+      try { await vault.save(credentials); await vaultStatus('SAVED'); }
+      catch { vaultState({ message: 'SAVE_FAILED' }); }
+      finally { credentials.username = ''; credentials.password = ''; }
+    }
     await openProtectedSession();
     state(casPrefill.completed ? 'CAS_PREFILLED' : 'READY');
   } else { throw new Error('control-frame'); }
 }
-ipcMain.handle('myneige:connect', (event, credentials) => {
-  if (!trusted(event) || !authPending || !validateCredentials(credentials)) throw new Error('Soumission refusée.');
+function submitCredentials(credentials) {
   authPending = false;
   casPrefill.capture(credentials);
   const user = Buffer.from(credentials.username, 'utf8'), password = Buffer.from(credentials.password, 'utf8');
@@ -196,6 +220,37 @@ ipcMain.handle('myneige:connect', (event, credentials) => {
   user.fill(0); password.fill(0); credentials.username = ''; credentials.password = '';
   state('CONNECTING');
   return true;
+}
+ipcMain.handle('myneige:connect', (event, credentials, remember = false) => {
+  if (!trusted(event) || !authPending || vaultBusy || typeof remember !== 'boolean' || !validateCredentials(credentials)) throw new Error('Soumission refusée.');
+  clearRemember();
+  if (remember) {
+    rememberPending = { user: Buffer.from(credentials.username), password: Buffer.from(credentials.password) };
+    rememberTimer = setTimeout(clearRemember, 180000); rememberTimer.unref();
+  }
+  return submitCredentials(credentials);
+});
+ipcMain.handle('myneige:vault-status', event => { if (!trusted(event)) throw new Error('Action refusée.'); return vaultStatus(); });
+ipcMain.handle('myneige:vault-unlock', async event => {
+  if (!trusted(event) || !authPending || vaultBusy || stopping) throw new Error('Action refusée.');
+  vaultBusy = true; const epoch = vaultEpoch;
+  try {
+    const bytes = form.getNativeWindowHandle();
+    const handle = bytes.length === 8 ? bytes.readBigUInt64LE() : BigInt(bytes.readUInt32LE());
+    const credentials = await vault.unlock(handle);
+    if (!credentials) return { connected: false, message: 'DENIED' };
+    try {
+      if (epoch !== vaultEpoch || stopping || !trusted(event) || !authPending) return { connected: false, message: 'DENIED' };
+      submitCredentials(credentials); return { connected: true };
+    } finally { credentials.username = ''; credentials.password = ''; }
+  } catch { return { connected: false, message: 'UNAVAILABLE' }; }
+  finally { vaultBusy = false; }
+});
+ipcMain.handle('myneige:vault-forget', async event => {
+  if (!trusted(event) || stopping) throw new Error('Action refusée.');
+  ++vaultEpoch; clearRemember(); casPrefill.clear(); vault.cancelActive();
+  try { await vault.forget(); return await vaultStatus('DELETED'); }
+  catch { vaultState({ message: 'DELETE_FAILED' }); return { message: 'DELETE_FAILED' }; }
 });
 ipcMain.on('myneige:disconnect', event => { if (trusted(event)) { send('UI_STOP'); shutdown(); } });
 registerCasIPC(ipcMain, prefillOwners);
@@ -237,6 +292,7 @@ function protectedWindow(browserSession = webSession, prefiller = casPrefill) {
 function shutdown(failed = false) {
   if (stopping) return;
   stopping = true; authPending = false; proxySecret = undefined;
+  ++vaultEpoch; clearRemember(); vault?.stop();
   vpnReady = false; casPrefill.clear();
   downloads?.stop();
   for (const window of BrowserWindow.getAllWindows()) window.destroy();

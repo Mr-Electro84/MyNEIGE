@@ -20,15 +20,21 @@
       <p>Dans les limites autorisées par la loi applicable, l’auteur décline toute responsabilité pour les conséquences de son utilisation, notamment une atteinte à la sécurité ou à l’intégrité de votre compte VPN/CAS, une perte, une altération ou une divulgation de données, ou une inexactitude des informations affichées. Vérifiez les informations importantes auprès des services officiels de l’université.</p>
       <p>Cette mention ne limite pas les droits auxquels la loi ne permet pas de renoncer.</p>
     </aside>
+    <section class="vault" aria-label="Identifiants enregistrés">
+      <p id="vault-state" class="note" role="status" aria-live="polite">Vérification de l’enregistrement local…</p>
+      <button id="saved-connect" class="secondary" type="button" disabled>Se connecter avec Windows Hello</button>
+      <button id="forget" class="secondary" type="button" disabled>Supprimer mes identifiants enregistrés</button>
+    </section>
     <form id="credentials" autocomplete="off">
       <label for="username">Identifiant universitaire</label>
       <input id="username" name="username" type="text" maxlength="1024" autocomplete="off" autocapitalize="none" spellcheck="false" required disabled>
       <label for="password">Mot de passe VPN</label>
       <input id="password" name="password" type="password" maxlength="1024" autocomplete="off" required disabled>
+      <label class="remember"><input id="remember" type="checkbox" disabled> Enregistrer mes identifiants sur cet ordinateur</label>
       <button id="connect" type="submit" disabled>Connecter et ouvrir APPIGS</button>
     </form>
     <button id="disconnect" class="secondary" type="button">Fermer la session</button>
-    <p class="note">Les mêmes identifiants seront préremplis sur CAS après connexion du VPN. Vous validerez vous-même « SE CONNECTER ». La copie temporaire expire après 3 minutes ; aucun mot de passe n’est enregistré par MyNEIGE.</p>
+    <p class="note">Les mêmes identifiants seront préremplis sur CAS après connexion du VPN. Vous validerez vous-même « SE CONNECTER ». Sans votre choix d’enregistrement, seule une copie temporaire de 3 minutes est conservée. L’enregistrement utilise la protection du compte Windows ; sa réutilisation par MyNEIGE exige Windows Hello.</p>
   </main>
 </body>
 </html>

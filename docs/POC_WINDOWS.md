@@ -34,6 +34,8 @@ Le résultat est enregistré dans `.local/poc/wfp-test.txt` si l’élévation a
 
 ## Préparer OpenVPN
 
+`npm start` intègre désormais la détection d’OpenVPN et propose sa préparation s’il manque, avant la saisie des identifiants. L’installation requiert l’UAC et ne modifie pas silencieusement une installation existante incompatible. Enregistrement facultatif DPAPI/Hello et suppression : [mode d’emploi J2](J2_CREDENTIALS_SETUP.md).
+
 Version de départ vérifiée pour ce pilote : OpenVPN Community 2.7.8-I001 x64, depuis [la source officielle](https://openvpn.net/community/). Le moteur et le pilote TAP sont installés sur la machine de développement ; aucune GUI ni service automatique n’a été sélectionné. Pour une autre machine :
 
 ```powershell

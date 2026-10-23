@@ -535,6 +535,8 @@ int adapterTest(const Options &options) {
 }
 int connectSession(const Options &options) {
     require(isAdministrator(), "connect requires an elevated console");
+    if (options.browserMode)
+        selectInteractiveUser();
     protectSupervisor();
     require(options.seconds >= 1 && options.seconds <= (options.browserMode ? 3600u : 60u), "Invalid pilot duration");
     auto mutex = sessionMutex();

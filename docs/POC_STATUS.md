@@ -4,7 +4,7 @@
 
 ## Résultats acquis
 
-- Compilation MSVC x64 C++20, `/W4 /WX`, SDK Windows 26100 ; 27 tests natifs et 21 tests JavaScript réussis (48 au total).
+- Compilation MSVC x64 C++20, `/W4 /WX`, SDK Windows 26100 ; 27 tests de protocole natifs et 26 tests JavaScript réussis (53 au total), plus le test natif du coffre DPAPI avec données fictives.
 - Connexion universitaire réelle : certificat serveur vérifié, `CONNECTED`, IPv4, passerelle et deux DNS poussés ; attente de `IpDadStatePreferred` avant autorisation du relais.
 - DNS APPIGS UDP et TCP via le tunnel ; HEAD HTTPS avec certificat vérifié, réponse `302`, sondes répétées. La console ne suit pas les redirections et ne collecte pas de corps de page.
 - Proxy sans secret refusé (`407`) ; autre exécutable explicitement lié au TAP refusé (`WSAEACCES` 10013).
@@ -75,6 +75,16 @@ Six tests Node supplémentaires passent. Les douze vérifications Chromium passe
 La recette réelle confirme le fonctionnement des menus et l’enregistrement d’un fichier exporté par APPIGS dans un pop-up séparé. Après correction du contrôleur de fenêtres, le journal observe `BROWSER_DOWNLOAD status=STARTED`, puis `COMPLETED` ; l’utilisateur confirme explicitement « Oui, fichier enregistré avec succès ». Aucun contenu de fichier universitaire n’a été inspecté. La session a ensuite été fermée proprement (sortie 0), avec blocage des requêtes après arrêt du VPN puis du relais et nettoyage final réussi. Diagnostics locaux : `.local/browser/live-session.txt` et `.local/browser/exit-code.txt`.
 
 Le premier essai avait révélé l’échec des exports en pop-up : le contrôleur recréait ces fenêtres avec `loadURL`, ce qui perdait les POST et le lien avec la page d’origine. La correction conserve la création native Chromium tout en appliquant la session et les protections du pilote. Les cinq scénarios de pop-up ajoutés couvrent cette régression. Cette première session avait été fermée proprement (sortie 0).
+
+### Extension J2 — identifiants Windows et préparation d’OpenVPN
+
+[Fonctionnement et limites](J2_CREDENTIALS_SETUP.md). Enregistrement facultatif des identifiants après connexion VPN confirmée, protection DPAPI en portée utilisateur, lecture précédée d’une vérification native Windows Hello, suppression sans déverrouillage et commande indépendante `credentials:forget`. Auxiliaire natif protégé en écriture et sans permis réseau ; opérations réservées au formulaire local.
+
+Le test natif avec données fictives réussit : aller-retour DPAPI, refus d’un fichier altéré et suppression répétée. Cinq tests Node supplémentaires réussissent. Le précontrôle WFP vérifie l’appel réel du statut natif depuis le formulaire, sans aucun retour d’identifiants ; CAS et les douze scénarios de navigation/téléchargements passent aussi (sortie 0). La détection d’OpenVPN existant, la vérification du MSI officiel en cache et le refus d’un faux MSI sont exécutés avec succès, sans nouvelle installation.
+
+Premier essai utilisateur : enregistrement confirmé explicitement, puis fermeture du formulaire ; fin propre de la session, blocage après arrêt VPN/relais et sortie 0. Au second lancement, l’utilisateur confirme la demande Windows Hello puis le fonctionnement VPN/CAS sans ressaisie des identifiants VPN. CAS produit `PREFILLED` et APPIGS répond 200. Cette seconde session est également fermée proprement, avec blocage après arrêt VPN/relais et sortie 0. L’utilisateur confirme ensuite explicitement la recette du bouton de suppression : message de suppression sans demande Hello et bouton de connexion Hello désactivé. Le parcours réel enregistrement → réutilisation après Hello → suppression est donc confirmé sur cette machine. Aucun identifiant ni contenu du coffre réel n’a été lu par l’agent. Le test natif de suppression avec données fictives est également acquis ; aucun nouveau lancement après suppression n’est revendiqué par cette confirmation.
+
+Installation fraîche sur VM sans OpenVPN, redémarrage requis et annulation du MSI/UAC non exécutés. Le lancement retient l’identité du bureau interactif plutôt que celle d’un autre administrateur saisi pour l’UAC ; ce cas avec deux comptes distincts reste à qualifier. Aucun succès n’est attribué à ces scénarios sur la seule base des tests locaux.
 
 ## Environnement et intégrité
 

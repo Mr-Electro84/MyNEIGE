@@ -1,5 +1,6 @@
 #include <initguid.h>
 #include "platform.hpp"
+#include <userenv.h>
 #include <aclapi.h>
 #include <shlobj.h>
 #include <knownfolders.h>
@@ -432,16 +433,22 @@ Child Job::spawn(const std::wstring &executable, const std::vector<std::wstring>
     for (auto &arg : args)
         command += L" " + quoteArgument(arg);
     PROCESS_INFORMATION process{};
-    const DWORD flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT;
+    const DWORD flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
     Handle token;
     if (restricted)
         token = restrictedToken();
+    void *environment = nullptr;
+    if (restricted)
+        require(CreateEnvironmentBlock(&environment, token.h, FALSE), "Cannot prepare interactive user environment");
     BOOL started = restricted ? CreateProcessAsUserW(token.h, executable.c_str(), command.data(), nullptr, nullptr,
-                                                     TRUE, flags, nullptr, nullptr, &info.StartupInfo, &process)
+                                                     TRUE, flags, environment, nullptr, &info.StartupInfo, &process)
                               : CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, TRUE, flags,
                                                nullptr, nullptr, &info.StartupInfo, &process);
+    const auto startError = started ? ERROR_SUCCESS : GetLastError();
+    if (environment)
+        DestroyEnvironmentBlock(environment);
     if (!started)
-        wincheck(GetLastError(), "Cannot start supervised child");
+        wincheck(startError, "Cannot start supervised child");
     Child result;
     result.process = Handle(process.hProcess);
     result.pid = process.dwProcessId;

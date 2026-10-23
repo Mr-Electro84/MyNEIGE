@@ -17,5 +17,5 @@ app.whenReady().then(() => run({ session, CasPrefill,
 })).then(checks => {
   clearTimeout(timer); console.log(`BROWSER_FEATURES_TEST passed checks=${checks}`); app.exit(0);
 }).catch(error => {
-  clearTimeout(timer); console.error('BROWSER_FEATURES_TEST failed: ' + error.message); app.exit(1);
+  clearTimeout(timer); console.error('BROWSER_FEATURES_TEST failed: ' + error.stack); app.exit(1);
 });

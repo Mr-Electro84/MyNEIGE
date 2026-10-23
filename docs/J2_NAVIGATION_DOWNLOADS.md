@@ -52,6 +52,14 @@ Le diagnostic ne contient que les états `STARTED`, `COMPLETED`, `CANCELLED`, `I
 
 Les destinations hors politique, HTTP, `file:` et `data:` restent refusées. La gestion des services externes nécessiterait une révision explicite du périmètre.
 
+## Consultation des PDF
+
+Les réponses `application/pdf` proposées en consultation (`Content-Disposition: inline` ou sans téléchargement forcé) utilisent le lecteur PDF intégré à Chromium, dans la session universitaire existante, y compris en iframe et en pop-up POST. Les pièces jointes `attachment` conservent le parcours de téléchargement.
+
+Le lecteur nécessite des ressources locales que le filtrage HTTPS/WSS universitaire bloquait : l'extension intégrée `mhjfbmdgcfjbbpaeojofohoefgiehjai` et certaines ressources `chrome://resources`. Le module `src/main/pdf-policy.js` autorise uniquement sa page initiale en sous-fenêtre d'un document universitaire, une liste exacte de scripts/styles provenant du lecteur, et la navigation de son propre sous-cadre vers un flux PDF à identifiant UUID. Les ressources exigent le contexte de frame et l'origine initiatrice du lecteur ; les informations absentes ou les frames détruites sont refusées.
+
+Ces exceptions ne modifient pas `allowedURL`, les domaines réseau, le proxy, WFP, le sandbox, l'isolation du contexte ou l'accès Node. Elles ne permettent pas les navigations principales vers les pages internes, les autres extensions ou les destinations externes. Les ressources internes ne sont pas journalisées comme des domaines réseau. La liste correspond à Electron 45.0.0 ; toute évolution du lecteur doit être validée par les tests de consultation avant d'élargir cette liste.
+
 ## Avertissement de connexion
 
 L’écran affiche, avant les champs, un encadré « Un pilote à utiliser avec discernement ». Il indique le caractère expérimental et indépendant, l’utilisation aux risques de l’utilisateur, l’absence de garantie, et la déclinaison de responsabilité de l’auteur pour les comptes VPN/CAS, pertes/altérations/divulgations de données et inexactitudes affichées. Le texte réserve les limites de la loi applicable et les droits auxquels on ne peut renoncer.
@@ -59,6 +67,8 @@ L’écran affiche, avant les champs, un encadré « Un pilote à utiliser avec 
 Cette formulation exprime une information et une limitation souhaitée, sans prétendre garantir une exonération juridique absolue. Elle accompagne les sections 7 et 8 de la [licence Apache 2.0 du dépôt](../LICENSE), qui reste inchangée. Aucun écran d’acceptation ni case obligatoire n’a été ajouté.
 
 ## Vérifications
+
+La correction PDF porte le total à 27 vérifications Chromium : les 22 précédentes, consultation directe avec `inline`, consultation sans `Content-Disposition`, iframe, pop-up POST, et refus des navigations principales hors politique. Le PDF de test contient désormais une vraie page ; les tests attendent le chargement réussi du lecteur et vérifient le nombre de pages, l'URL source et l'absence d'accès Node. Une capture locale facultative permet de contrôler visuellement le rendu. Quatre tests Node supplémentaires vérifient les exceptions internes et leurs refus (autres extensions, types de requête, contexte absent/détruit, origine initiatrice et journalisation).
 
 ```powershell
 npm test

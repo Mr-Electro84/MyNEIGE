@@ -1,6 +1,7 @@
 'use strict';
 const path = require('node:path');
 const { allowedURL } = require('./policy');
+const { pdfNavigationAllowed } = require('./pdf-policy');
 const { installNavigation } = require('./navigation');
 const { APP_ICON } = require('./app-icon');
 function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready = () => true, Menu = require('electron').Menu, windowOptions = {}, universityWindow }) {
@@ -18,7 +19,10 @@ function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show
   installNavigation({ window, Menu, ready, downloads, universityWindow });
   window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   for (const event of ['will-navigate', 'will-redirect', 'will-frame-navigate']) {
-    window.webContents.on(event, (event, url) => { if (!allowedURL(typeof url === 'string' ? url : event.url)) event.preventDefault(); });
+    window.webContents.on(event, (details, url) => {
+      if (!allowedURL(typeof url === 'string' ? url : details.url) &&
+          !(event === 'will-frame-navigate' && pdfNavigationAllowed(details))) details.preventDefault();
+    });
   }
   window.webContents.on('will-attach-webview', event => event.preventDefault());
   window.webContents.setWindowOpenHandler(({ url }) => {

@@ -13,14 +13,52 @@ async function until(check) {
   const deadline = Date.now() + 5000;
   while (!check()) { if (Date.now() >= deadline) throw new Error('Browser feature fixture timed out'); await pause(25); }
 }
+function pdfFixture() {
+  const stream = 'BT /F1 24 Tf 50 750 Td (MyNEIGE PDF fixture) Tj ET\n';
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}endstream`];
+  let content = '%PDF-1.4\n';
+  const offsets = [];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(content.length); content += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xref = content.length;
+  content += 'xref\n0 6\n0000000000 65535 f \n' + offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+  return Buffer.from(content + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+}
+async function expectPdf(window, url) {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    const viewer = window.webContents.mainFrame.framesInSubtree.find(frame =>
+      frame.url === 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html');
+    if (viewer && await viewer.executeJavaScript(`(() => {
+      const viewer = document.querySelector('pdf-viewer');
+      return viewer?.loadState_ === 'success' && viewer.originalUrl === ${JSON.stringify(url)} &&
+        viewer.documentDimensions?.pageDimensions?.length === 1 &&
+        typeof require === 'undefined' && typeof process === 'undefined';
+    })()`)) return;
+    await pause(50);
+  }
+  throw new Error('Inline PDF did not render its single page');
+}
 async function run({ session, protectedWindow, CasPrefill, directory }) {
   fs.mkdirSync(directory, { recursive: true });
   const browserSession = session.fromPartition(`features-${Date.now()}`, { cache: false });
   protectRequests(browserSession);
-  const payload = Buffer.from('%PDF-1.4\nMyNEIGE fixture, not a student document.\n%%EOF\n');
+  const payload = pdfFixture();
   let slowStream, progressDialog = false, popupPosts = 0;
   browserSession.protocol.handle('https', async request => {
     const url = new URL(request.url);
+    if (['/inline.pdf', '/inline-auto.pdf', '/inline-post.pdf'].includes(url.pathname)) {
+      if (url.pathname === '/inline-post.pdf' && (request.method !== 'POST' || await request.text() !== 'fixture=local-only'))
+        throw new Error('Inline PDF popup lost POST body');
+      const headers = { 'content-type': 'application/pdf' };
+      if (url.pathname !== '/inline-auto.pdf') headers['content-disposition'] = 'inline; filename="consultation.pdf"';
+      return new Response(payload, { headers });
+    }
+    if (url.pathname === '/pdf-frame') return new Response('<!doctype html><iframe src="/inline.pdf"></iframe>',
+      { headers: { 'content-type': 'text/html' } });
     if (['/popup-post.pdf', '/popup-blank.pdf', '/popup-named.pdf'].includes(url.pathname)) {
       if (request.method !== 'POST' || await request.text() !== 'fixture=local-only') throw new Error('Popup lost the fixture POST body');
       ++popupPosts;
@@ -92,6 +130,42 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     navigation.menu.getMenuItemById('home').click();
     await until(() => window.webContents.getURL() === START_URL && !window.webContents.isLoading());
     if (window.webContents.session !== browserSession) throw new Error('Navigation changed session');
+    const inline = 'https://www.appigs.univ-avignon.fr/inline.pdf';
+    await window.loadURL(inline); await expectPdf(window, inline);
+    // Rendering state/page count above are mandatory; a hidden compositor may
+    // refuse an optional screenshot in the native WFP preflight.
+    try { fs.writeFileSync(path.join(directory, 'inline-pdf-preview.png'), (await window.webContents.capturePage()).toPNG()); } catch { /* Optional preview. */ }
+    ++checks;
+    const automaticInline = 'https://www.appigs.univ-avignon.fr/inline-auto.pdf';
+    await window.loadURL(automaticInline); await expectPdf(window, automaticInline); ++checks;
+    await window.loadURL('https://www.appigs.univ-avignon.fr/pdf-frame'); await expectPdf(window, inline); ++checks;
+    await window.loadURL(one);
+    await window.webContents.executeJavaScript(`(() => {
+      const form = document.createElement('form'); form.method = 'POST'; form.target = '_blank';
+      form.action = 'https://www.appigs.univ-avignon.fr/inline-post.pdf';
+      const input = document.createElement('input'); input.name = 'fixture'; input.value = 'local-only';
+      form.append(input); document.body.append(form); form.submit(); form.remove();
+    })()`);
+    const popupPdf = 'https://www.appigs.univ-avignon.fr/inline-post.pdf';
+    await until(() => [...windows].some(child => !child.isDestroyed() && child.webContents.getURL() === popupPdf));
+    const pdfWindow = [...windows].find(child => !child.isDestroyed() && child.webContents.getURL() === popupPdf);
+    await expectPdf(pdfWindow, popupPdf);
+    if (pdfWindow.webContents.session !== browserSession || downloads.records().length) throw new Error('Inline PDF changed session or started a download');
+    pdfWindow.destroy(); ++checks;
+    // Real renderer navigation must not acquire a blanket internal-page exception.
+    const deniedNavigation = [];
+    const observe = (event, url) => { if (event.defaultPrevented) deniedNavigation.push(typeof url === 'string' ? url : event.url); };
+    window.webContents.on('will-frame-navigate', observe);
+    for (const url of ['chrome://settings/', 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html', 'https://evil.test/']) {
+      await window.webContents.executeJavaScript(`location.href = ${JSON.stringify(url)}; void 0`);
+      // Chromium itself rejects web-page access to some internal schemes
+      // before emitting navigation events; HTTPS must reach our own guard.
+      if (url.startsWith('https:')) await until(() => deniedNavigation.includes(url));
+      else await pause(100);
+      if (window.webContents.getURL() !== one) throw new Error('Out-of-policy navigation accepted');
+    }
+    window.webContents.removeListener('will-frame-navigate', observe);
+    ++checks;
     await window.webContents.executeJavaScript(`(() => {
       const a = document.createElement('a'); a.href = 'https://www.appigs.univ-avignon.fr/fixture.pdf';
       a.download = 'preuve-pilote.pdf'; document.body.append(a); a.click(); a.remove();

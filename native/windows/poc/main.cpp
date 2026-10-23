@@ -111,7 +111,7 @@ int wmain(int argc, wchar_t **argv) {
                      "  myneige-poc connect [--openvpn path] [--profile path]\n"
                      "      [--dns verified-IPv4] [--gateway verified-IPv4] [--seconds 1..60]\n"
                      "  myneige-poc cleanup                   Admin: remove only owned stale WFP/staging\n\n"
-                     "Prototype UI only; no packaging. Credentials only in masked console or local form.\n";
+                     "Credentials only in masked console or local form.\n";
         return command == "help" ? 0 : 2;
     } catch (const std::exception &error) {
         std::cerr << "ERROR: " << error.what() << "\n";

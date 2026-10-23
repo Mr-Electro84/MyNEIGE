@@ -14,6 +14,7 @@ const { createDownloads } = require('./downloads');
 const { protectRequests } = require('./session-policy');
 const { NativeVault } = require('./native-vault');
 const { APP_ICON } = require('./app-icon');
+const { helpMenu } = require('./about');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
@@ -151,6 +152,8 @@ async function control(line) {
     form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', icon: APP_ICON, width: 700, height: 1040, show: !testMode,
       webPreferences: { session: localSession, preload: path.join(__dirname, '../preload/form.js'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
     send('BROWSER_STAGE FORM_CREATED');
+    form.setMenu(Menu.buildFromTemplate([helpMenu(form)]));
+    form.setMenuBarVisibility(true);
     form.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     form.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
     form.webContents.on('will-navigate', event => event.preventDefault());

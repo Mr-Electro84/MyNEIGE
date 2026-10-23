@@ -556,6 +556,7 @@ Staging::~Staging() {
         }
         DeleteFileW(executable.c_str());
         DeleteFileW(profile.c_str());
+        DeleteFileW((directory / L"myneige-vault.exe").c_str());
         RemoveDirectoryW(directory.c_str());
     }
 }
@@ -624,6 +625,7 @@ void recoverStaging() {
         }
         DeleteFileW((entry.path() / L"relay.exe").c_str());
         DeleteFileW((entry.path() / L"client.ovpn").c_str());
+        DeleteFileW((entry.path() / L"myneige-vault.exe").c_str());
         removeProtectedTree(entry.path() / L"browser", entry.path());
         RemoveDirectoryW(entry.path().c_str());
     }

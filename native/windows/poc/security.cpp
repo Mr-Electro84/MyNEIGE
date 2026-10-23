@@ -1,11 +1,20 @@
 #include "platform.hpp"
 #include <aclapi.h>
 #include <tlhelp32.h>
+#include <shlobj.h>
 
 namespace neige {
 static Handle interactiveToken;
 static std::wstring interactiveSid;
 static bool useInteractiveToken = false;
+std::filesystem::path interactiveLocalAppData() {
+    PWSTR folder = nullptr;
+    require(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DEFAULT, interactiveToken.h, &folder)),
+            "Cannot locate interactive user data directory");
+    std::filesystem::path result(folder);
+    CoTaskMemFree(folder);
+    return result;
+}
 static Handle processToken(HANDLE process, DWORD access) {
     HANDLE raw = nullptr;
     require(OpenProcessToken(process, access, &raw) != 0, "Cannot open process token");

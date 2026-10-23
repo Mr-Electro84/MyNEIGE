@@ -79,6 +79,7 @@ void removeOwnedTap(Job &job, const std::filesystem::path &tool, const std::wstr
 Handle restrictedToken();
 std::wstring currentUserSid();
 void selectInteractiveUser();
+std::filesystem::path interactiveLocalAppData();
 int vaultWorker();
 int vaultSelfTest();
 int vaultForget();

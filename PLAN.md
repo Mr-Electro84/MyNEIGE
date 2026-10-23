@@ -257,7 +257,7 @@ docs/                           # décisions, recette et installation
 - Linux : paquet installé d’abord pour gérer l’auxiliaire et ses droits ; AppImage conditionnelle aux prérequis. Jamais d’interface Electron root ni de sandbox désactivée.
 - Vérifier intégrité, provenance et notices des binaires ; prévoir signature de distribution. Pas de binaire non vérifié téléchargé au lancement.
 - Vérifier le périmètre de redistribution du profil universitaire avant publication.
-- Pilote : exclusions Git ajoutées, licence npm alignée sur LICENSE et test factice remplacé par la compilation et les tests natifs. Aucun packaging ajouté.
+- Alpha : lanceur natif, runtime Electron et profil VPN embarqués, construction du ZIP et de l’installateur NSIS Windows 11 x64. Voir [la distribution Alpha](docs/ALPHA_DISTRIBUTION.md). Signature et validation sur VM propre restent à effectuer.
 
 ## 9. Jalons et portée du GO
 
@@ -272,7 +272,7 @@ docs/                           # décisions, recette et installation
 
 L’utilisateur saisira les identifiants localement lors des essais. Aucun mot de passe à communiquer dans le chat. Aucune charge/date ferme avant le verdict J1.
 
-État : J0 réalisé ; preuves contrôlées J1 acquises et décision dans [docs/ARCHITECTURE_WINDOWS.md](docs/ARCHITECTURE_WINDOWS.md). J1 n’est pas déclaré intégralement clos : veille, changement physique de réseau, VPN tiers et changements effectifs de DNS restent à qualifier. J2 : formulaire, IPC authentifié, session et confinement, préremplissage CAS et accès APPIGS après clic manuel confirmés. Compléter la recette des fenêtres annexes, erreurs, challenges et captures navigateur. Aucun démarrage du packaging.
+État : J0 réalisé ; preuves contrôlées J1 acquises et décision dans [docs/ARCHITECTURE_WINDOWS.md](docs/ARCHITECTURE_WINDOWS.md). J1 n’est pas déclaré intégralement clos : veille, changement physique de réseau, VPN tiers et changements effectifs de DNS restent à qualifier. J2 : formulaire, IPC authentifié, session et confinement, préremplissage CAS et accès APPIGS après clic manuel confirmés. Compléter la recette des fenêtres annexes, erreurs, challenges et captures navigateur. J3 : packaging Alpha Windows engagé après GO, avec profil VPN embarqué ; voir [la distribution](docs/ALPHA_DISTRIBUTION.md).
 
 ## 10. Recette et preuves attendues
 

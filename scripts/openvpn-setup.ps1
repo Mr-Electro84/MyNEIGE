@@ -6,6 +6,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $filename = 'OpenVPN-2.7.8-I001-amd64.msi'
 $expectedHash = '1EA61A3056905B90607D4B0F084C04E5CF3043E07CF192D9CD44B0474F29CC49'
 $binary = Join-Path $repoRoot '.local\poc\myneige-poc.exe'
+$distributed = Test-Path -LiteralPath (Join-Path $repoRoot 'distribution.json') -PathType Leaf
+if ($distributed) { $binary = Join-Path $repoRoot 'bin\myneige-controller.exe' }
 . (Join-Path $PSScriptRoot 'openvpn-prerequisites.ps1')
 . (Join-Path $PSScriptRoot 'openvpn-driver-store.ps1')
 $script:setupStage = 'Detection'
@@ -83,7 +85,7 @@ if ($Ensure -or $Install -or $CheckOnly -or $Diagnose -or $InstallWorker) {
     # Detect stale local build products before inventory or any MSI/UAC action.
     # Diagnostic/check modes and the elevated worker must never compile.
     $script:setupStage = 'Verification pilote MyNEIGE'
-    Confirm-OpenVpnNativeChecker -AllowBuild (($Ensure -or $Install) -and !$InstallWorker -and !$Diagnose -and !$CheckOnly) -Probe {
+    Confirm-OpenVpnNativeChecker -AllowBuild (!$distributed -and ($Ensure -or $Install) -and !$InstallWorker -and !$Diagnose -and !$CheckOnly) -Probe {
         if (!(Test-Path -LiteralPath $binary -PathType Leaf)) { return [pscustomobject]@{ Code = -1; Output = '' } }
         Invoke-OpenVpnNativeCommand -Binary $binary -Arguments @('setup-capabilities')
     } -Build {
@@ -152,7 +154,7 @@ if ($InstallWorker) {
 }
 function Get-VerifiedPackage {
     $script:setupStage = 'Telechargement et verification'
-    $cacheDirectory = if ($DownloadDirectory) { [IO.Path]::GetFullPath($DownloadDirectory) } else { Join-Path $repoRoot '.local\downloads' }
+    $cacheDirectory = if ($DownloadDirectory) { [IO.Path]::GetFullPath($DownloadDirectory) } elseif ($distributed) { Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'MyNEIGE\downloads' } else { Join-Path $repoRoot '.local\downloads' }
     New-Item -ItemType Directory -Path $cacheDirectory -Force | Out-Null
     $selected = $Package
     if (!$selected) {

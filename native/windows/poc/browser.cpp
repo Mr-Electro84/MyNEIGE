@@ -1,4 +1,5 @@
 #include "browser.hpp"
+#include "session.hpp"
 namespace neige {
 static void copyReadOnlyTree(const std::filesystem::path &source, const std::filesystem::path &destination) {
     const DWORD attributes = GetFileAttributesW(source.c_str());
@@ -16,7 +17,9 @@ static void copyReadOnlyTree(const std::filesystem::path &source, const std::fil
 }
 void BrowserPilot::prepare(const Staging &staging, const std::filesystem::path &projectRoot) {
     auto root = std::filesystem::absolute(projectRoot);
-    auto runtime = root / L"node_modules/electron/dist";
+    auto runtime = root / L"resources/runtime";
+    if (!std::filesystem::is_directory(runtime))
+        runtime = root / L"node_modules/electron/dist";
     require(std::filesystem::is_regular_file(runtime / L"electron.exe"), "Install the pinned Electron runtime first");
     const auto browser = staging.directory / L"browser";
     require(std::filesystem::create_directory(browser), "Cannot create protected browser staging");
@@ -24,12 +27,14 @@ void BrowserPilot::prepare(const Staging &staging, const std::filesystem::path &
     copyReadOnlyTree(runtime, browser / L"runtime");
     copyReadOnlyTree(root / L"src", browser / L"app");
     copyReadOnlyTree(root / L"assets", browser / L"assets");
+    copyReadOnlyTree(root / L"package.json", browser / L"package.json");
+    copyReadOnlyTree(root / L"LICENSE", browser / L"LICENSE");
     executable = browser / L"runtime/electron.exe";
     entry = browser / L"app/main/index.js";
     vault = staging.directory / L"myneige-vault.exe";
     require(CopyFileW(imagePath().c_str(), vault.c_str(), TRUE), "Cannot prepare protected credential helper");
     grantUserRead(vault);
-    userData = root / L".local/browser-data" / staging.directory.filename();
+    userData = interactiveLocalAppData() / L"MyNEIGE/browser-data" / staging.directory.filename();
 }
 static Socket listener6(uint16_t &port) {
     Socket result(socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP));
@@ -354,6 +359,8 @@ void BrowserPilot::stop() {
 }
 int browserTest(const std::filesystem::path &projectRoot) {
     require(isAdministrator(), "browser-test requires an elevated console");
+    selectInteractiveUser();
+    auto mutex = sessionMutex();
     protectSupervisor();
     Staging staging;
     staging.allowUserRead();

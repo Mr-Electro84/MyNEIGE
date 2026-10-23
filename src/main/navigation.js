@@ -1,5 +1,6 @@
 'use strict';
 const { START_URL, allowedURL } = require('./policy');
+const { helpMenu } = require('./about');
 const UNIVERSITY_LINKS = Object.freeze([
   { id: 'university-ent', label: 'ENT', url: 'https://ent.univ-avignon.fr/' },
   { id: 'university-directory', label: 'Annuaire (VPN)', url: 'https://annuaire.univ-avignon.fr/' },
@@ -42,7 +43,8 @@ function installNavigation({ window, Menu, ready, downloads, universityWindow = 
     { label: 'Fichiers', submenu: [
       { id: 'downloads', label: 'Téléchargements…', accelerator: 'Control+J', enabled: Boolean(downloads),
         click: () => { void downloads?.show(window).catch(() => {}); } }
-    ] }
+    ] },
+    helpMenu(window)
   ]);
   const refresh = () => {
     if (window.isDestroyed() || contents.isDestroyed()) return;

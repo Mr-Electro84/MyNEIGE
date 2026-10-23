@@ -1,6 +1,6 @@
 {
   "name": "myneige",
-  "version": "1.0.0",
+  "version": "1.0.0-alpha.1",
   "description": "Pilote Windows pour un acces universitaire via OpenVPN isole",
   "homepage": "https://github.com/Mr-Electro84/MyNEIGE#readme",
   "bugs": {
@@ -11,10 +11,13 @@
     "url": "git+https://github.com/Mr-Electro84/MyNEIGE.git"
   },
   "license": "Apache-2.0",
-  "author": "",
+  "author": "Matra DevProd",
   "type": "commonjs",
   "main": "src/main/index.js",
   "scripts": {
+    "dist:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-distribution.ps1",
+    "dist:dir": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-distribution.ps1 -SkipInstaller",
+    "test:dist": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-distribution.ps1",
     "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-browser.ps1",
     "credentials:forget": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-browser.ps1 -ForgetCredentials",
     "openvpn:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/openvpn-setup.ps1 -Install",

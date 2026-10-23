@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $setup = Join-Path $PSScriptRoot 'openvpn-setup.ps1'
 . (Join-Path $PSScriptRoot 'openvpn-prerequisites.ps1')
+. (Join-Path $PSScriptRoot 'openvpn-driver-store.ps1')
 $checks = 0
 function Assert-Setup([bool]$Ok, [string]$Message) { if (!$Ok) { throw $Message }; $script:checks++ }
 $missing = Get-OpenVpnDecision -TapReady $false
@@ -53,6 +54,19 @@ $case = Invoke-Scenario $missing -Architecture 'Arm64'
 Assert-Setup ($case.Error -like '*Arm64*' -and $case.Steps -eq '') 'Architecture mismatch must be explicit.'
 $case = Invoke-Scenario $missing -After $incomplete
 Assert-Setup ($case.Error -ne '' -and $case.Steps -eq 'offer,download,install,recheck') 'Final prerequisite validation must remain mandatory.'
+$failedCheck = [pscustomobject]@{ State = 'Incomplete'; Path = ''; Message = 'paquet_TAP=False; controle_natif=1' }
+$case = Invoke-Scenario $missing -After $failedCheck
+Assert-Setup ($case.Error -like '*paquet_TAP=False*controle_natif=1*') 'Final validation must preserve the component failure rather than return a generic code.'
+# Query the actual Driver Store read-only. No adapter/service is created.
+$driverInf = Get-OpenVpnTapDriver
+foreach ($id in @('tap0901','root\tap0901','ROOT\TAP0901')) { Assert-Setup ([MyNeige.TapDriverStore]::IsTapHardwareId($id)) 'The exact TAP hardware ID must be accepted.' }
+foreach ($id in @('ovpn-dco','root\tap0901-foreign','tap0901.evil','root\other')) { Assert-Setup (![MyNeige.TapDriverStore]::IsTapHardwareId($id)) 'A foreign network driver cannot satisfy the TAP prerequisite.' }
+if ($driverInf) {
+    Assert-Setup (Test-Path -LiteralPath $driverInf -PathType Leaf) 'The driver store returned an unavailable INF.'
+    $staged = Get-OpenVpnDecision -Existing @('engine.exe') -Validated @('engine.exe') -TapReady ([bool]$driverInf)
+    Assert-Setup ($staged.State -eq 'Ready') 'An installed TAP package must not require an active adapter or service.'
+}
+Write-Output ('OPENVPN_DRIVER_STORE_TEST read_only=true package_found=' + [bool]$driverInf)
 $fixture = Join-Path $root ('.local\false installer ' + [Guid]::NewGuid().ToString('N') + '.msi')
 $resultFile = $fixture + '.json'
 try {

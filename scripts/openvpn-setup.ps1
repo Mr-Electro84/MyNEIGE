@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Install, [switch]$Ensure, [switch]$CheckOnly, [switch]$VerifyOnly,
+param([switch]$Install, [switch]$Ensure, [switch]$CheckOnly, [switch]$VerifyOnly, [switch]$Diagnose,
       [switch]$InstallWorker, [string]$Package, [string]$ResultFile, [string]$DownloadDirectory)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -7,6 +7,7 @@ $filename = 'OpenVPN-2.7.8-I001-amd64.msi'
 $expectedHash = '1EA61A3056905B90607D4B0F084C04E5CF3043E07CF192D9CD44B0474F29CC49'
 $binary = Join-Path $repoRoot '.local\poc\myneige-poc.exe'
 . (Join-Path $PSScriptRoot 'openvpn-prerequisites.ps1')
+. (Join-Path $PSScriptRoot 'openvpn-driver-store.ps1')
 $script:setupStage = 'Detection'
 function Write-SetupResult([string]$Status, [string]$Path, [string]$Message, [int]$Code) {
     if ($ResultFile -and !$InstallWorker) {
@@ -37,13 +38,18 @@ function Test-OfficialPackage([string]$Path) {
 function Get-OpenVpnState {
     $candidates = @((Join-Path $env:ProgramFiles 'OpenVPN\bin\openvpn.exe'))
     if (${env:ProgramFiles(x86)}) { $candidates += Join-Path ${env:ProgramFiles(x86)} 'OpenVPN\bin\openvpn.exe' }
+    foreach ($registry in @('HKLM:\SOFTWARE\OpenVPN','HKLM:\SOFTWARE\WOW6432Node\OpenVPN')) {
+        $configuration = Get-ItemProperty -LiteralPath $registry -ErrorAction SilentlyContinue
+        if ($configuration.exe_path) { $candidates += $configuration.exe_path }
+        if ($configuration.bin_dir) { $candidates += Join-Path $configuration.bin_dir 'openvpn.exe' }
+    }
     $registered = @()
     foreach ($registry in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')) {
         $registered += @(Get-ItemProperty -Path $registry -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'OpenVPN*' })
     }
     foreach ($entry in $registered) { if ($entry.InstallLocation) { $candidates += Join-Path $entry.InstallLocation 'bin\openvpn.exe' } }
     $existing = @($candidates | Select-Object -Unique | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
-    $validated = @(); $partial = @()
+    $validated = @(); $partial = @(); $probeResults = @()
     if ($existing.Count -and !(Test-Path -LiteralPath $binary)) { throw 'Compiler le pilote avant de verifier les fichiers OpenVPN existants.' }
     foreach ($candidate in $existing) {
         if (!(Test-Path -LiteralPath (Join-Path (Split-Path -Parent $candidate) 'tapctl.exe') -PathType Leaf)) {
@@ -54,18 +60,31 @@ function Get-OpenVpnState {
             continue
         }
         $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        $null = & $binary openvpn-check --openvpn $candidate 2>&1
+        $probeOutput = & $binary openvpn-check --openvpn $candidate 2>&1
         $code = $LASTEXITCODE; $ErrorActionPreference = $previous
+        $probeMessage = (($probeOutput | Out-String) -replace '[\x00-\x1f\x7f]', ' ').Trim()
+        if ($probeMessage.Length -gt 250) { $probeMessage = $probeMessage.Substring(0,250) }
+        $probeResults += ('controle_natif=' + $code + ' fichier=' + $candidate + ' resultat=' + $probeMessage)
         if ($code -eq 0) { $validated += $candidate }
     }
-    $tap = (Test-Path -LiteralPath (Join-Path $env:SystemRoot 'System32\drivers\tap0901.sys') -PathType Leaf) -and
-        (Test-Path -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\tap0901')
-    return Get-OpenVpnDecision -Existing $existing -Validated $validated -Partial $partial -Registered $registered -TapReady $tap
+    $tapInf = Get-OpenVpnTapDriver
+    $decision = Get-OpenVpnDecision -Existing $existing -Validated $validated -Partial $partial -Registered $registered -TapReady ([bool]$tapInf)
+    $details = ('moteurs_presents={0}; moteurs_valides={1}; tapctl_manquant={2}; paquet_TAP={3}' -f $existing.Count,$validated.Count,$partial.Count,([bool]$tapInf))
+    if ($probeResults.Count) { $details += '; ' + ($probeResults -join '; ') }
+    $decision | Add-Member -NotePropertyName Details -NotePropertyValue $details
+    $decision | Add-Member -NotePropertyName DriverInf -NotePropertyValue $tapInf
+    if ($decision.State -ne 'Ready') { $decision.Message += ' Controle : ' + $details }
+    return $decision
 }
 if ($VerifyOnly) {
     $script:setupStage = 'Verification paquet'
     if (!$Package) { throw 'Paquet a verifier manquant.' }
     Test-OfficialPackage $Package; Write-Output 'OPENVPN_PACKAGE_VERIFIED'; exit 0
+}
+if ($Diagnose) {
+    # No MSI, adapter, route, VPN or credential operation in this mode.
+    Get-OpenVpnState | ConvertTo-Json -Depth 4
+    exit 0
 }
 if ($InstallWorker) {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -110,9 +129,10 @@ if ($InstallWorker) {
             }
             exit $installer.ExitCode
         }
-        Write-Output 'OPENVPN_INSTALLED'
+        Write-Output 'OPENVPN_MSI_COMPLETED'
         if ($installer.ExitCode -eq 3010) { Write-Output 'OPENVPN_REBOOT_REQUIRED'; exit 3010 }
-        if ((Get-OpenVpnState).State -ne 'Ready') { throw "Moteur ou pilote TAP absent apres installation. Diagnostic : $stage" }
+        # The unelevated parent performs final readiness verification and can
+        # report its exact cause. MSI success alone is never reported as Ready.
     } finally {
         # Only this verified copy is removed. Keep the protected installer log.
         if (Test-Path -LiteralPath $trusted) { Remove-Item -LiteralPath $trusted }

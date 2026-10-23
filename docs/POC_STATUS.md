@@ -92,6 +92,10 @@ L’utilisateur précise ensuite que les deux signalements d’installation conc
 
 Correction : adresse canonique utilisée, refus des redirections maintenu, vérifications SHA-256/signature inchangées et diagnostic enrichi du type et de la ligne de l’exception. Le nouveau test `test-openvpn-setup.ps1 -FreshDownload` part d’un dossier vide et appelle le vrai script sous Windows PowerShell 5.1, sans utiliser le MSI en cache : téléchargement terminé, empreinte attendue, signature valide et nettoyage des fichiers partiels réussis. Les 28 contrôles passent sur ce poste ; aucun MSI n’a été exécuté. L’installation complète sur le second PC reste à confirmer après ce correctif.
 
+Retour suivant du second PC : le téléchargement réussit, le MSI atteint son code de réussite, puis le contrôle affiche « Moteur ou pilote TAP absent apres installation ». L’utilisateur confirme qu’OpenVPN apparaît dans les applications installées. Le journal ne prouve donc pas une absence du produit ; le blocage est la vérification après MSI. Un défaut du contrôle est identifié : il exigeait un service TAP et un fichier sous `System32\drivers`, alors que le paquet peut être seulement préparé dans le magasin de pilotes Windows.
+
+Correction : interrogation SetupAPI du magasin de pilotes sans création d’adaptateur, avec correspondance exacte des identifiants TAP ; prise en compte des chemins `exe_path`/`bin_dir` du registre OpenVPN. Les contrôles natifs de signature/version sont conservés. La validation finale a lieu dans le parent et préserve le détail du composant en échec au lieu de remonter seulement le code 1 du travailleur élevé. Nouveau mode `-Diagnose` sans installation ni VPN. Sous Windows PowerShell 5.1, les 33 contrôles passent sur le poste de développement et le diagnostic réel renvoie `Ready`, contrôle natif 0 et INF TAP présent. L’utilisateur reporte son nouvel essai ; la reconnaissance et le démarrage sur le second PC après ce dernier correctif restent à confirmer.
+
 ## Environnement et intégrité
 
 - Windows x64 build 26200.9457 ; MSVC 14.44, SDK 10.0.26100.0 ; Electron 45.0.0 épinglé.

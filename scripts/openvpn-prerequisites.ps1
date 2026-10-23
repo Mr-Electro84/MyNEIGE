@@ -27,7 +27,7 @@ function Invoke-OpenVpnPreparation {
     if ($code -eq 3010) { return [pscustomobject]@{ Status = 'RebootRequired'; Path = ''; Code = 3010 } }
     if ($code -ne 0) { throw "Installation OpenVPN non terminee (code $code)." }
     $after = & $Recheck
-    if ($after.State -ne 'Ready') { throw 'Installation terminee, mais le moteur Community et le pilote TAP ne sont pas encore utilisables. Consultez le diagnostic de preparation.' }
+    if ($after.State -ne 'Ready') { throw ('Le MSI est termine, mais le controle final echoue. ' + $after.Message) }
     return [pscustomobject]@{ Status = 'Ready'; Path = $after.Path; Code = 0 }
 }
 function Get-OpenVpnMsiProductCode([string]$Path) {

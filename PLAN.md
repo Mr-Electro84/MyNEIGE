@@ -4,11 +4,13 @@ Révision : 23 octobre 2026.
 
 **Statut : GO initial pour le pilote Windows, puis GO pour poursuivre J1 et commencer J2. Interface finale, packaging et Linux différés.**
 
+Extension J2 autorisée le 23 octobre : réutiliser temporairement les identifiants VPN pour préremplir la vraie page CAS. Validation du formulaire laissée à l’utilisateur ; aucune soumission automatique. Détails : [docs/CAS_PREFILL.md](docs/CAS_PREFILL.md).
+
 Le code du pilote et son mode d’emploi figurent dans [README.md](README.md) et [docs/POC_WINDOWS.md](docs/POC_WINDOWS.md). Les résultats réellement obtenus sont consignés dans [docs/POC_STATUS.md](docs/POC_STATUS.md). Un prototype compilé ne vaut pas démonstration d’isolation complète.
 
 Le pilote crée un TAP dédié, applique sa quarantaine avant OpenVPN et contrôle les sorties par WFP et liaison explicite des sockets. Le mode console utilise WinHTTP ; le début de J2 ajoute un formulaire et une session Electron protégée. Relais et Electron utilisent désormais des jetons restreints de niveau moyen. Le packaging reste différé.
 
-**Résultat au 23 octobre : VPN réel, DNS UDP/TCP et HTTPS APPIGS `302` ; captures physique/TAP, application témoin simultanée, perte/restauration de la route propre, arrêt VPN/relais et crash brutal du contrôleur exécutés. Précontrôle Electron IPv4/IPv6/UDP, enfant, sandbox et authentification du proxy par Chromium réussis. Les 37 tests automatisés passent. J2 : formulaire réel et page CAS affichée, confirmée par l’utilisateur ; connexion ENT non testée. La clôture complète de J1 reste conditionnée aux cas non exécutés, notamment R7.**
+**Résultat au 23 octobre : VPN réel, DNS UDP/TCP et HTTPS APPIGS `302` ; captures physique/TAP, application témoin simultanée, perte/restauration de la route propre, arrêt VPN/relais et crash brutal du contrôleur exécutés. Précontrôle Electron IPv4/IPv6/UDP, enfant, sandbox et authentification du proxy par Chromium réussis. Les 42 tests natifs/JavaScript passent ; neuf scénarios de formulaire passent dans Chromium. J2 : préremplissage réel des deux champs CAS et accès APPIGS après clic manuel confirmés par l’utilisateur ; fermeture avec code 0. La clôture complète de J1 reste conditionnée aux cas non exécutés, notamment R7.**
 
 ## 1. Verdict et état de la validation
 
@@ -179,7 +181,7 @@ Placer OpenVPN, relais et résolveur dans un espace réseau dédié avec ses rou
 - Management protégé : socket Unix restreinte sur Linux ; boucle locale authentifiée et amorçage protégé sur Windows. `127.0.0.1` seul ne suffit pas.
 - Lancement en attente puis libération après connexion du contrôleur. Étudier `management-client` pour l’arrêt sur perte de contrôle, sans le confondre avec une authentification.
 - Sérialiser les identifiants avec l’échappement du protocole ; rejeter les caractères de contrôle permettant une injection.
-- Ne pas conserver les identifiants OpenVPN ; redemander une saisie si réauthentification nécessaire. Détecter les challenges et expliquer ceux qui ne sont pas pris en charge.
+- Ne pas stocker les identifiants OpenVPN sur disque ; redemander une saisie si réauthentification nécessaire. Pour l’extension J2 autorisée, garder une seule copie en mémoire du processus principal pendant 3 minutes maximum, consommée une seule fois pour CAS après validation du VPN. Détecter les challenges et expliquer ceux qui ne sont pas pris en charge.
 - Effacer les champs et relâcher les références rapidement ; aucune promesse d’effacement de toutes les copies JavaScript, de la pagination OS ou d’un dump. Pas de traces/dumps applicatifs contenant des secrets.
 
 Référence protocolaire : [S8].
@@ -221,7 +223,7 @@ PLAN.md
 VPN_Universite_Avignon.ovpn      # source intacte
 package.json / package-lock.json
 src/main/                       # orchestration, IPC, sessions, fenêtres, états
-src/preload/                    # formulaire local uniquement
+src/preload/                    # formulaire local et remplissage CAS isolé, sans API exposée au site
 src/renderer/                   # connexion et états
 native/windows/                 # Win32, WFP, contrôle réseau
 native/linux/                   # espace réseau et privilèges
@@ -254,7 +256,7 @@ docs/                           # décisions, recette et installation
 
 L’utilisateur saisira les identifiants localement lors des essais. Aucun mot de passe à communiquer dans le chat. Aucune charge/date ferme avant le verdict J1.
 
-État : J0 réalisé ; preuves contrôlées J1 acquises et décision dans [docs/ARCHITECTURE_WINDOWS.md](docs/ARCHITECTURE_WINDOWS.md). J1 n’est pas déclaré intégralement clos : veille, changement physique de réseau, VPN tiers et changements effectifs de DNS restent à qualifier. J2 a commencé conformément au nouveau GO : formulaire, IPC authentifié, session et confinement, ouverture CAS réelle confirmée. Parcours ENT authentifié à poursuivre. Aucun démarrage du packaging.
+État : J0 réalisé ; preuves contrôlées J1 acquises et décision dans [docs/ARCHITECTURE_WINDOWS.md](docs/ARCHITECTURE_WINDOWS.md). J1 n’est pas déclaré intégralement clos : veille, changement physique de réseau, VPN tiers et changements effectifs de DNS restent à qualifier. J2 : formulaire, IPC authentifié, session et confinement, préremplissage CAS et accès APPIGS après clic manuel confirmés. Compléter la recette des fenêtres annexes, erreurs, challenges et captures navigateur. Aucun démarrage du packaging.
 
 ## 10. Recette et preuves attendues
 

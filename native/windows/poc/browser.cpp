@@ -314,6 +314,10 @@ bool BrowserPilot::wantsStop() {
             std::cout << "BROWSER_NETWORK " << line.substr(13) << std::endl;
         if (line == "UI_PROXY_AUTH MATCHED")
             std::cout << "BROWSER_PROXY_AUTH matched=true" << std::endl;
+        if (line == "UI_CAS_PREFILL PREFILLED" || line == "UI_CAS_PREFILL SKIPPED" ||
+            line == "UI_CAS_PREFILL UNSUPPORTED" || line == "UI_CAS_PREFILL UNAVAILABLE" ||
+            line == "UI_CAS_PREFILL EXPIRED")
+            std::cout << "BROWSER_CAS_PREFILL status=" << line.substr(15) << std::endl;
         require(line.rfind("UI_ERROR ", 0) != 0, "Browser reported a guarded navigation failure");
         if (line == "UI_STOP")
             return true;
@@ -352,6 +356,10 @@ int browserTest(const std::filesystem::path &projectRoot) {
         browser.prepare(staging, projectRoot);
         browser.launch(firewall, true);
         browser.proxyTest(firewall);
+        browser.send("TEST_CAS_PREFILL\n");
+        require(browser.wait(30000) == "UI_CAS_TEST_DONE", "CAS prefill integration tests failed");
+        std::cout << "BROWSER_CAS_TEST prefill=true manual_submit=true origin_guard=true csrf_preserved=true"
+                  << std::endl;
         browser.stop();
         firewall.clear();
         std::cout << "RESULT {\"browser_preflight\":true,\"vpn\":\"not_tested\"}" << std::endl;

@@ -16,7 +16,7 @@ Electron démarre après sa quarantaine WFP. Tous ses enfants utilisant l’imag
 
 La règle Chromium de résolution refuse tous les noms, avec une exclusion pour l’adresse numérique du proxy `127.0.0.1`. Cette exclusion est nécessaire au fonctionnement du proxy lui-même ; elle n’ajoute aucun permis WFP et ne concerne aucune destination web distante. La résolution des destinations CONNECT appartient au relais lié au VPN.
 
-Le formulaire local possède un preload limité. La fenêtre universitaire utilise une autre session en mémoire, sans preload, sans Node, avec sandbox, isolation de contexte et vérification TLS. Aucun contenu distant ne peut soumettre une commande VPN par le bridge du formulaire. Téléchargements et permissions sont refusés dans ce pilote.
+Le formulaire local possède un preload limité. La fenêtre universitaire utilise une autre session en mémoire, sans Node, avec sandbox, isolation de contexte et vérification TLS. L’extension J2 ajoute un preload isolé de préremplissage CAS : aucune API ni aucun bridge n’est exposé au site. Son IPC ne délivre qu’une fois les identifiants au document principal CAS attendu, après validation du VPN. Aucun contenu distant ne peut soumettre une commande VPN par le bridge du formulaire. Téléchargements et permissions sont refusés dans ce pilote.
 
 ## Canaux et secrets
 
@@ -24,7 +24,7 @@ OpenVPN utilise un management inversé local, secret aléatoire transmis par pip
 
 Le contrôleur crée avant Electron un pipe nommé aléatoire, à instance unique, refusant les clients distants. Il vérifie le PID du client contre le processus qu’il supervise avant de transmettre une commande ou un secret. Le nom public du pipe est le seul paramètre de contrôle passé en argument. Identifiants VPN et secret proxy éphémère passent dans ce canal, sans fichier de credentials ni sortie standard. Le codage hexadécimal est un cadrage, pas un chiffrement : la protection repose sur le pipe et son authentification.
 
-Le formulaire vide ses champs après soumission. Les buffers natifs sont effacés au mieux. Aucune garantie d’effacement de toutes les copies JavaScript ou de la pagination Windows n’est revendiquée. Le compte web ENT/CAS reste saisi manuellement dans le site ; aucun remplissage automatique avec le mot de passe VPN.
+Le formulaire vide ses champs après soumission. Les buffers natifs sont effacés au mieux. L’extension J2 conserve une copie en buffers dans le processus principal Electron pendant 3 minutes maximum à compter de la saisie. Elle est effacée lors de sa délivrance unique au preload CAS, d’une fermeture, d’un blocage ou d’une expiration. Les champs DOM restent renseignés pour le clic manuel puis sont vidés au départ de la page. Aucune garantie d’effacement de toutes les copies JavaScript ou de la pagination Windows n’est revendiquée. Les scripts de CAS peuvent lire les champs remplis, comme lors d’une saisie manuelle. Voir [CAS_PREFILL.md](CAS_PREFILL.md).
 
 ## Arrêt et récupération
 

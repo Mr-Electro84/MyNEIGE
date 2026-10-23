@@ -8,6 +8,8 @@ const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { START_URL, allowedURL, validateCredentials } = require('./policy');
+const { CasPrefill, registerCasIPC } = require('./cas-prefill');
+const { createProtectedWindow } = require('./protected-window');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
@@ -34,6 +36,13 @@ const networkErrors = new Set(['ERR_FAILED', 'ERR_ABORTED', 'ERR_BLOCKED_BY_CLIE
   'ERR_CERT_COMMON_NAME_INVALID', 'ERR_CERT_DATE_INVALID', 'ERR_SSL_PROTOCOL_ERROR']);
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
+let vpnReady = false;
+const prefillOwners = new WeakMap();
+const casPrefill = new CasPrefill({ ready: () => vpnReady && !stopping, report: status => {
+  send(`UI_CAS_PREFILL ${status}`);
+  if (status === 'PREFILLED') state('CAS_PREFILLED');
+  else state('CAS_MANUAL');
+} });
 function diagnostic(error) {
   const kind = ['Error', 'TypeError', 'ReferenceError', 'RangeError'].includes(error?.name) ? error.name : 'OTHER';
   const location = String(error?.stack || '').match(/index\.js:(\d+):(\d+)/);
@@ -155,21 +164,27 @@ async function control(line) {
       if (!['ERR_CONNECTION_CLOSED', 'ERR_CONNECTION_RESET', 'ERR_EMPTY_RESPONSE', 'ERR_SSL_PROTOCOL_ERROR', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_TUNNEL_CONNECTION_FAILED'].includes(error.code)) throw error;
     }
     send('UI_NAV_PROXY_DONE');
+  } else if (line === 'TEST_CAS_PREFILL' && form && testMode) {
+    await require('./cas-prefill-test').run({ session, protectedWindow, CasPrefill });
+    send('UI_CAS_TEST_DONE');
   } else if (line === 'AUTH_REQUIRED' && form) {
     authPending = true; state('AUTH_REQUIRED');
   } else if (parts[0] === 'STATE' && parts.length === 2 && ['BLOCKED', 'ERROR', 'CONNECTING'].includes(parts[1])) {
+    if (parts[1] !== 'CONNECTING') { vpnReady = false; casPrefill.clear(); }
     state(parts[1]);
     if (parts[1] === 'BLOCKED' && remote && !remote.isDestroyed()) remote.destroy();
   } else if (parts[0] === 'VPN_READY' && parts.length === 3 && form && !proxySecret) {
     proxyPort = Number(parts[1]); proxySecret = parts[2];
     if (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535 || !/^[a-f0-9]{64}$/.test(proxySecret)) throw new Error('proxy');
+    vpnReady = true;
     await openProtectedSession();
-    state('READY');
+    state(casPrefill.completed ? 'CAS_PREFILLED' : 'READY');
   } else { throw new Error('control-frame'); }
 }
 ipcMain.handle('myneige:connect', (event, credentials) => {
   if (!trusted(event) || !authPending || !validateCredentials(credentials)) throw new Error('Soumission refusée.');
   authPending = false;
+  casPrefill.capture(credentials);
   const user = Buffer.from(credentials.username, 'utf8'), password = Buffer.from(credentials.password, 'utf8');
   send(`UI_CREDENTIALS ${user.toString('hex')} ${password.toString('hex')}`);
   user.fill(0); password.fill(0); credentials.username = ''; credentials.password = '';
@@ -177,6 +192,7 @@ ipcMain.handle('myneige:connect', (event, credentials) => {
   return true;
 });
 ipcMain.on('myneige:disconnect', event => { if (trusted(event)) { send('UI_STOP'); shutdown(); } });
+registerCasIPC(ipcMain, prefillOwners);
 app.on('login', (event, _contents, _details, info, callback) => {
   event.preventDefault();
   if (info.isProxy && info.host === '127.0.0.1' && info.port === proxyPort && proxySecret) {
@@ -214,21 +230,13 @@ async function openProtectedSession() {
   });
   await remote.loadURL(START_URL);
 }
-function protectedWindow() {
-  const window = new BrowserWindow({ title: 'MyNEIGE · Navigation universitaire', width: 1200, height: 850, show: !testMode,
-    webPreferences: { session: webSession, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webRTCIPHandlingPolicy: 'disable_non_proxied_udp', navigateOnDragDrop: false } });
-  window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
-  for (const event of ['will-navigate', 'will-redirect', 'will-frame-navigate']) window.webContents.on(event, (event, url) => { if (!allowedURL(typeof url === 'string' ? url : event.url)) event.preventDefault(); });
-  window.webContents.on('will-attach-webview', event => event.preventDefault());
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (allowedURL(url)) { const popup = protectedWindow(); popup.loadURL(url).catch(() => {}); }
-    return { action: 'deny' };
-  });
-  return window;
+function protectedWindow(browserSession = webSession, prefiller = casPrefill) {
+  return createProtectedWindow({ BrowserWindow, session: browserSession, prefiller, owners: prefillOwners, show: !testMode });
 }
 function shutdown(failed = false) {
   if (stopping) return;
   stopping = true; authPending = false; proxySecret = undefined;
+  vpnReady = false; casPrefill.clear();
   for (const window of BrowserWindow.getAllWindows()) window.destroy();
   if (webSession) webSession.closeAllConnections().finally(() => app.exit(failed ? 1 : 0)); else app.exit(failed ? 1 : 0);
 }

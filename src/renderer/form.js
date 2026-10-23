@@ -8,6 +8,8 @@ const messages = Object.freeze({
   AUTH_REQUIRED: 'Saisissez vos identifiants VPN. Ils ne seront pas enregistrés.',
   CONNECTING: 'Connexion au VPN universitaire…',
   READY: 'VPN connecté. La fenêtre APPIGS utilise le tunnel.',
+  CAS_PREFILLED: 'Identifiants CAS préremplis. Cliquez sur « SE CONNECTER » dans la fenêtre universitaire.',
+  CAS_MANUAL: 'VPN connecté. Préremplissage CAS indisponible : saisissez vos identifiants directement sur le site.',
   BLOCKED: 'Session arrêtée ou connexion perdue. La navigation est bloquée.',
   ERROR: 'La connexion a échoué. Le diagnostic local précise la cause.'
 });

@@ -4,7 +4,7 @@
 
 ## Résultats acquis
 
-- Compilation MSVC x64 C++20, `/W4 /WX`, SDK Windows 26100 ; 27 tests natifs et 10 tests JavaScript réussis.
+- Compilation MSVC x64 C++20, `/W4 /WX`, SDK Windows 26100 ; 27 tests natifs et 15 tests JavaScript réussis (42 au total).
 - Connexion universitaire réelle : certificat serveur vérifié, `CONNECTED`, IPv4, passerelle et deux DNS poussés ; attente de `IpDadStatePreferred` avant autorisation du relais.
 - DNS APPIGS UDP et TCP via le tunnel ; HEAD HTTPS avec certificat vérifié, réponse `302`, sondes répétées. La console ne suit pas les redirections et ne collecte pas de corps de page.
 - Proxy sans secret refusé (`407`) ; autre exécutable explicitement lié au TAP refusé (`WSAEACCES` 10013).
@@ -43,14 +43,14 @@ L’analyse exige des contrôles positifs web, DNS, transport VPN et témoin pen
 | R9 | Proxy sans secret refusé ; management secret/PID, pipe Electron authentifié par PID. Campagne adverse exhaustive du pipe à compléter. |
 | R10 | GUID renouvelés entre sessions, anciens enfants/ports fermés ; IP VPN différentes observées entre recettes. Changement effectif des DNS et reprise interactive complète non qualifiés. |
 | R11 | Parseurs/classement d’erreurs testés avec données fictives ; pas de campagne réelle de mauvais mots de passe/MFA ni de contournement TLS. |
-| R12 | Formulaire réel, VPN et page CAS `200` affichée, confirmée par l’utilisateur. Connexion ENT et parcours complet APPIGS non testés par l’utilisateur. |
+| R12 | VPN réel, préremplissage des deux champs CAS et accès APPIGS après clic manuel confirmés par l’utilisateur. Popups, challenges/MFA et captures du parcours navigateur à compléter. |
 | R13/R14 | Crash contrôleur et récupération propres acquis ; autres étapes, concurrence et reprise à compléter. |
 | R15 | Différé avec packaging J3. |
 | R16 | Aucun fichier/argument de credentials ni trace management brute volontairement produit. Caches Chromium sous `.local/` ; aucune garantie d’effacement de toutes les copies mémoire/OS. |
 
 ## Début de J2
 
-Formulaire local, bridge limité, pipe authentifié par PID et session web séparée implémentés. Les images Electron sont copiées dans un répertoire de session protégé ; la quarantaine précède le démarrage de l’arbre de processus. Les fenêtres distantes n’ont aucun preload ; sandbox, isolation de contexte et TLS restent actifs. Le seul permis réseau est le proxy TCP local de la session avec secret éphémère.
+Formulaire local, bridge limité, pipe authentifié par PID et session web séparée implémentés. Les images Electron sont copiées dans un répertoire de session protégé ; la quarantaine précède le démarrage de l’arbre de processus. Le preload isolé CAS de l’extension J2 n’expose aucune API au site ; sandbox, isolation de contexte et TLS restent actifs. Le seul permis réseau est le proxy TCP local de la session avec secret éphémère.
 
 L’essai local complet passe : réponse `407`, authentification du proxy et début TLS réellement reçus, puis fermeture volontaire du transport sans serveur distant. Il couvre une correction nécessaire : la règle de résolution Chromium doit exclure l’adresse numérique du proxy `127.0.0.1`, sans ajouter de permis WFP.
 
@@ -58,7 +58,13 @@ L’essai réel via formulaire établit le VPN et obtient le HEAD HTTPS `302`, p
 
 Fermeture réelle du formulaire : processus arrêtés, requêtes après perte VPN puis relais bloquées, nettoyage et comparaison finale du réseau réussis, sortie `0`. Diagnostics : `.local/browser/live-session.txt`, `.local/browser/exit-code.txt`. Le précontrôle local complet est dans `.local/poc/browser-test.txt`. Les captures J1 ci-dessus concernent le mode console ; une capture complète du parcours navigateur/CAS reste à acquérir.
 
-La politique provisoire admet HTTPS/WSS 443 pour `univ-avignon.fr` et ses sous-domaines. Les domaines exacts du parcours doivent être identifiés avant resserrement. Permissions, téléchargements et ouvertures externes refusés ; compte web éventuel saisi manuellement.
+La politique provisoire de navigation admet HTTPS/WSS 443 pour `univ-avignon.fr` et ses sous-domaines. Les domaines exacts du parcours doivent être identifiés avant resserrement. Permissions, téléchargements et ouvertures externes refusés. Le préremplissage autorisé en J2 est plus strict : origine CAS exacte et service APPIGS uniquement ; le clic reste manuel.
+
+### Extension J2 — préremplissage CAS
+
+Implémentation et contrat dans [CAS_PREFILL.md](CAS_PREFILL.md). Les cinq tests Node supplémentaires passent. Neuf scénarios Chromium passent avec les mêmes fenêtres, preload et gestion IPC que le pilote réel : remplissage et caractères spéciaux, conservation des champs cachés/cookies, zéro soumission automatique, renderer sans Node/bridge, refus d’autres origines/services/actions, de saisies existantes, de doublons, d’un état de flux absent et des sous-cadres, annulation et non-réutilisation après rechargement. Exécutés via `browser:test` sous WFP (sortie 0), puis via le lanceur sans UAC `test:cas` (sortie 0). Aucun compte réel utilisé par ces tests ; aucun jeton du HTML utilisateur copié dans les fixtures.
+
+L’essai réel atteint CAS `200`, produit `BROWSER_CAS_PREFILL status=PREFILLED`, puis APPIGS `200`. Le contenu des champs n’est pas lu par le diagnostic. L’utilisateur confirme explicitement les deux champs préremplis et l’accès APPIGS après son clic sur « SE CONNECTER ». Le parcours normal VPN → CAS prérempli → clic manuel → APPIGS est donc acquis sur cette machine. Fermeture réelle : pertes VPN/relais bloquées, nettoyage et comparaison réseau réussis, sortie `0`. Les diagnostics locaux sont `.local/browser/live-session.txt` et `.local/browser/exit-code.txt` ; le profil source reste inchangé.
 
 ## Environnement et intégrité
 

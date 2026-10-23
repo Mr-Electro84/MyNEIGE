@@ -23,6 +23,7 @@ void BrowserPilot::prepare(const Staging &staging, const std::filesystem::path &
     grantUserRead(browser);
     copyReadOnlyTree(runtime, browser / L"runtime");
     copyReadOnlyTree(root / L"src", browser / L"app");
+    copyReadOnlyTree(root / L"assets", browser / L"assets");
     executable = browser / L"runtime/electron.exe";
     entry = browser / L"app/main/index.js";
     vault = staging.directory / L"myneige-vault.exe";

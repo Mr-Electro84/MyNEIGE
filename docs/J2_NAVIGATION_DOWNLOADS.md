@@ -1,4 +1,4 @@
-# J2 — navigation, téléchargements et avertissement
+# J2 — navigation, téléchargements, logo et avertissement
 
 Extension du pilote Windows autorisée le 23 octobre 2026. Aucun packaging ajouté.
 
@@ -11,9 +11,28 @@ Chaque fenêtre universitaire dispose d’un menu natif Windows :
 | Navigation → Précédent | Alt + gauche | Revient à une entrée admise de l’historique de cette fenêtre. |
 | Navigation → Suivant | Alt + droite | Avance dans cet historique. |
 | Navigation → Accueil APPIGS | Alt + début | Ouvre l’adresse APPIGS initiale dans la même session. |
+| Université → ENT | — | Ouvre `https://ent.univ-avignon.fr/` dans la fenêtre principale. |
+| Université → Annuaire (VPN) | — | Ouvre `https://annuaire.univ-avignon.fr/` dans la fenêtre principale. |
+| Université → Gestionnaire de projets (VPN) | — | Ouvre `https://projets.univ-avignon.fr/` dans la fenêtre principale. |
+| Université → E-UAPV/Moodle | — | Ouvre `https://e-uapv.univ-avignon.fr/` dans la fenêtre principale. |
+| Université → EDT | — | Ouvre `https://edt.univ-avignon.fr/` dans la fenêtre principale. |
 | Fichiers → Téléchargements | Ctrl + J | Affiche les états récents et permet d’annuler les transferts en cours. |
 
 Précédent/suivant sont désactivés lorsqu’aucune entrée correspondante n’est disponible ou admise. Les contrôles de domaines et le proxy restent ceux de la session ; aucun navigateur externe n’est ouvert. L’accueil conserve les cookies de la session. Le préremplissage CAS reste à usage unique : revenir à une page de connexion ne redélivre pas les identifiants.
+
+Le menu Université conserve la fenêtre initialement ouverte sur APPIGS, son historique et sa session ; depuis un pop-up, il cible aussi cette fenêtre principale, sans remplacer le contenu du pop-up. Ses commandes sont désactivées si le VPN n’est pas prêt ou si la fenêtre principale est fermée, et leur exécution revérifie ces conditions. Les mentions « VPN » sont informatives : toutes les requêtes MyNEIGE, même vers les services accessibles publiquement, restent acheminées dans le tunnel. Aucun nouveau domaine n’a été ajouté à la politique. Une session conservée ne garantit pas une authentification automatique sur chaque service ; les redirections CAS et l’accès réel restent à qualifier.
+
+## Icône Electron
+
+Le logo source est [Logo MyNEIGE@2x.png](../assets/Logo%20MyNEIGE@2x.png), un PNG transparent de 1 000 × 1 000 pixels. Le fichier dérivé [myneige.ico](../assets/myneige.ico) contient les tailles 16, 20, 24, 32, 40, 48, 64, 128 et 256 pixels. Il est fourni dans le dépôt ; aucune conversion au lancement n’est nécessaire. Pour le régénérer sous Windows après remplacement du logo :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-app-icon.ps1
+```
+
+Le formulaire, la fenêtre universitaire et tous les pop-ups reçoivent explicitement cette icône. Le processus définit le nom MyNEIGE et une identité de barre des tâches dédiée. Le contrôleur natif copie également les ressources `assets` en lecture seule dans le staging protégé, avec les mêmes contrôles de liens de réanalyse que le code. Après mise à jour du code natif, reconstruire avec `npm run poc:build` avant de lancer `npm start`.
+
+L’icône de la barre de titre a été vérifiée visuellement sur une page fictive locale ; l’apparence exacte des regroupements/épinglages de la barre des tâches reste à confirmer en recette Windows. Le binaire reste `electron.exe` : son icône intégrée, les raccourcis installés et l’installateur seront traités lors du packaging J3.
 
 ## Téléchargements
 
@@ -50,6 +69,8 @@ npm run browser:test  # Précontrôle complet avec WFP et UAC
 
 Les tests Node contrôlent la provenance, les redirections, les noms, les fenêtres autorisées, la disponibilité du VPN, l’annulation et les destinations d’historique. Les douze vérifications Chromium utilisent les mêmes fenêtres, menus, gestionnaire et filtrage de requêtes que le pilote : précédent, suivant, accueil, fichier HTTPS enregistré et contenu comparé, conservation de la session et du magasin de cookies, boîte de suivi, fichier `blob` enregistré, annulation d’un transfert en cours ; formulaires POST vers une nouvelle fenêtre et une fenêtre nommée, fenêtre vide préparée par JavaScript, maintien de la session et de l’isolation du pop-up, refus des ouvertures hors politique. Les réponses réseau sont des fixtures locales sans compte étudiant ; le test choisit un chemin sous `.local/` pour éviter une boîte de dialogue interactive. Cette fixture vérifie le magasin de cookies conservé, pas leur transmission à un serveur distant.
 
-Le précontrôle WFP exécute aussi ces scénarios avec l’image Electron confinée. L’essai réel d’un fichier universitaire et de la boîte native de sauvegarde est suivi séparément dans [POC_STATUS.md](POC_STATUS.md).
+L’extension Université/logo porte le total à 22 vérifications Chromium : les douze précédentes, lecture de l’icône depuis le chemin réel d’exécution, cinq destinations exactes dans le même WebContents/session sans nouvelle fenêtre, retour dans l’historique entre services, refus des commandes sans VPN y compris un clic déjà en attente, commande depuis un pop-up vers la fenêtre principale et refus après fermeture de celle-ci. Le test n’utilise aucun compte universitaire.
+
+Le précontrôle WFP exécute aussi ces scénarios avec l’image Electron confinée et les ressources réellement copiées par le contrôleur natif. L’essai réel d’un fichier universitaire et de la boîte native de sauvegarde est suivi séparément dans [POC_STATUS.md](POC_STATUS.md).
 
 Références : [Electron DownloadItem](https://www.electronjs.org/docs/latest/api/download-item), [NavigationHistory](https://www.electronjs.org/docs/latest/api/navigation-history), [création native des fenêtres](https://www.electronjs.org/docs/latest/api/web-contents#contentssetwindowopenhandlerhandler).

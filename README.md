@@ -21,6 +21,8 @@ La navigation ne démarre qu’après validation du tunnel. Les mêmes identifia
 
 Le menu **Navigation** propose Précédent, Suivant et Accueil APPIGS. Les téléchargements demandent où enregistrer le fichier ; **Fichiers → Téléchargements** (`Ctrl+J`) affiche leur état et permet l’annulation. Aucun fichier n’est ouvert automatiquement. L’écran de connexion affiche un avertissement d’utilisation. Voir [ces ajouts J2](docs/J2_NAVIGATION_DOWNLOADS.md).
 
+Le menu **Université** ouvre ENT, Annuaire (VPN), Gestionnaire de projets (VPN), E-UAPV/Moodle et EDT dans la fenêtre principale APPIGS, avec la même session et toujours via le tunnel. Le logo MyNEIGE est associé aux fenêtres Electron, y compris au formulaire et aux pop-ups. Le lanceur natif embarque les ressources ; après cette mise à jour, exécuter `npm run poc:build` avant `npm start`. L’icône intégrée de l’exécutable et les raccourcis installés restent prévus au packaging J3.
+
 L’enregistrement des identifiants est facultatif : protection Windows DPAPI, réutilisation après vérification Windows Hello et bouton de suppression sans déverrouillage. `npm run credentials:forget` permet aussi la suppression lorsque le pilote est fermé. Au démarrage, OpenVPN Community est vérifié ; s’il manque, MyNEIGE propose son téléchargement vérifié et son installation avec UAC. Voir [le fonctionnement et les limites](docs/J2_CREDENTIALS_SETUP.md).
 
 Pour lancer seulement l’installation/préparation d’OpenVPN : `npm run openvpn:install`. Une installation incomplète après désinstallation peut également déclencher la proposition d’installation/réparation. En cas d’échec, le lanceur affiche la cause et indique le diagnostic local.

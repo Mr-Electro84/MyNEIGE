@@ -102,6 +102,16 @@ Correction : protocole explicite de compatibilité scripts/pilote, vérifié ava
 
 Validation locale : compilation MSVC réussie, 48 contrôles de préparation sous Windows PowerShell 5.1, 27 tests natifs et 26 tests Node réussis. Les scénarios d’ancien pilote/reconstruction/échec de compilation sont simulés ; le protocole du nouveau binaire et le refus d’un fichier fictif non signé sont exercés réellement. Le diagnostic de l’installation existante renvoie `Ready`, `OPENVPN_COMPATIBLE` et le paquet TAP présent. Aucun MSI ni VPN lancé pour cette validation. La confirmation après mise à jour et recompilation sur le second PC reste attendue.
 
+### Extension J2 — menu Université et logo Electron
+
+Le GO utilisateur couvre les cinq liens universitaires et l’association du logo fourni aux fenêtres Electron. Le menu Université charge les adresses exactes ENT, Annuaire (VPN), Gestionnaire de projets (VPN), E-UAPV/Moodle et EDT dans le WebContents principal initialement ouvert sur APPIGS, y compris lorsqu’il est déclenché depuis un pop-up. Cookies, historique, session et protections sont conservés. Les mentions VPN sont informatives ; aucun accès direct ni élargissement des domaines autorisés n’a été introduit.
+
+Icône Windows multi-résolution générée depuis le PNG source, script reproductible fourni et icône appliquée au formulaire et aux fenêtres protégées. Les ressources sont copiées dans le staging natif protégé en lecture seule. Nom applicatif et identité de barre des tâches définis ; aucun packaging ni modification des ressources intégrées de `electron.exe`.
+
+Validation du 23 octobre 2026 : compilation MSVC, 27 tests natifs, 26 tests Node et test DPAPI avec données fictives réussis (`npm test`, sortie 0). Neuf scénarios CAS sans soumission automatique et 22 vérifications Chromium réussis (`test:cas` et `test:browser`, sorties 0). Les dix ajouts Chromium contrôlent l’icône lisible, les cinq destinations exactes dans le même WebContents/session, l’historique entre services, le refus sans VPN, le ciblage du principal depuis un pop-up et le refus après sa fermeture. Précontrôle `browser:test` également réussi sous WFP (sortie 0), en utilisant les ressources et le code copiés par le contrôleur natif ; aucune connexion VPN ni compte universitaire utilisés.
+
+La première exécution des tests dans le bac à sable de l’agent empêchait le démarrage d’Electron et le nettoyage du dossier temporaire DPAPI ; les commandes ont ensuite été exécutées avec succès hors de ce bac à sable, sans désactiver la sandbox Chromium ni les protections du pilote. Vérification visuelle sur une page fictive locale : logo présent dans la barre de titre, menu Université et cinq libellés présents. Accès réel aux cinq services, parcours SSO associés et affichage des regroupements/épinglages de barre des tâches encore à confirmer par l’utilisateur. Le PNG d’origine a été conservé.
+
 ## Environnement et intégrité
 
 - Windows x64 build 26200.9457 ; MSVC 14.44, SDK 10.0.26100.0 ; Electron 45.0.0 épinglé.

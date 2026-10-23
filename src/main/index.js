@@ -13,9 +13,12 @@ const { createProtectedWindow } = require('./protected-window');
 const { createDownloads } = require('./downloads');
 const { protectRequests } = require('./session-policy');
 const { NativeVault } = require('./native-vault');
+const { APP_ICON } = require('./app-icon');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
+app.setName('MyNEIGE');
+if (process.platform === 'win32') app.setAppUserModelId('fr.myneige.desktop');
 app.commandLine.appendSwitch('disable-quic');
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-http-cache');
@@ -145,7 +148,7 @@ async function control(line) {
     send('BROWSER_STAGE CHILD_BLOCKED');
     const localSession = session.fromPartition(`form-${Date.now()}`, { cache: false });
     localSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') }));
-    form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', width: 700, height: 1040, show: !testMode,
+    form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', icon: APP_ICON, width: 700, height: 1040, show: !testMode,
       webPreferences: { session: localSession, preload: path.join(__dirname, '../preload/form.js'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
     send('BROWSER_STAGE FORM_CREATED');
     form.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -188,8 +191,8 @@ async function control(line) {
     send('UI_VAULT_TEST_DONE');
   } else if (line === 'TEST_BROWSER_FEATURES' && form && testMode) {
     await require('./browser-features-test').run({ session, CasPrefill, directory: path.join(app.getPath('userData'), 'download-fixtures'),
-      protectedWindow: (browserSession, prefiller, fixtureDownloads) => createProtectedWindow({ BrowserWindow,
-        session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, show: false }) });
+      protectedWindow: (browserSession, prefiller, fixtureDownloads, ready) => createProtectedWindow({ BrowserWindow,
+        session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, ready, show: false }) });
     send('UI_BROWSER_FEATURES_DONE');
   } else if (line === 'AUTH_REQUIRED' && form) {
     authPending = true; state('AUTH_REQUIRED'); void vaultStatus();

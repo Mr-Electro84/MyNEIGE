@@ -6,6 +6,8 @@ const { START_URL } = require('./policy');
 const { createDownloads, safeFilename } = require('./downloads');
 const { navigationFor } = require('./navigation');
 const { protectRequests } = require('./session-policy');
+const { APP_ICON } = require('./app-icon');
+const { nativeImage } = require('electron');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
   const deadline = Date.now() + 5000;
@@ -43,9 +45,11 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
   // Tests choose a workspace path instead of showing the normal Save As dialog.
   browserSession.on('will-download', (_event, item) => item.setSavePath(path.join(directory, safeFilename(item.getFilename()))));
   const prefiller = new CasPrefill({ ready: () => true });
-  const window = protectedWindow(browserSession, prefiller, downloads);
+  let vpnReady = true;
+  const window = protectedWindow(browserSession, prefiller, downloads, () => vpnReady);
   let checks = 0;
   try {
+    if (nativeImage.createFromPath(APP_ICON).isEmpty()) throw new Error('Application icon missing or unreadable'); ++checks;
     const one = 'https://www.appigs.univ-avignon.fr/one', two = 'https://www.appigs.univ-avignon.fr/two';
     await window.loadURL(one);
     const navigation = navigationFor(window);
@@ -57,6 +61,36 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     await until(() => window.webContents.getURL() === two && !window.webContents.isLoading()); ++checks;
     navigation.menu.getMenuItemById('home').click();
     await until(() => window.webContents.getURL() === START_URL && !window.webContents.isLoading()); ++checks;
+    // Keep expected addresses independent of the menu implementation.
+    const services = [
+      ['university-ent', 'https://ent.univ-avignon.fr/'],
+      ['university-directory', 'https://annuaire.univ-avignon.fr/'],
+      ['university-projects', 'https://projets.univ-avignon.fr/'],
+      ['university-moodle', 'https://e-uapv.univ-avignon.fr/'],
+      ['university-timetable', 'https://edt.univ-avignon.fr/']
+    ];
+    const primaryContents = window.webContents, windowCount = windows.size;
+    for (const [id, url] of services) {
+      const item = navigation.menu.getMenuItemById(id);
+      if (!item?.enabled) throw new Error('University menu item missing or disabled');
+      item.click();
+      await until(() => window.webContents.getURL() === url && !window.webContents.isLoading());
+      if (windows.size !== windowCount || window.webContents !== primaryContents || window.webContents.session !== browserSession)
+        throw new Error('University menu replaced the window or session'); ++checks;
+    }
+    navigation.menu.getMenuItemById('back').click();
+    await until(() => window.webContents.getURL() === services[3][1] && !window.webContents.isLoading()); ++checks;
+    vpnReady = false; navigation.refresh();
+    for (const [id] of services) {
+      const item = navigation.menu.getMenuItemById(id);
+      if (item.enabled) throw new Error('University menu enabled without VPN');
+      item.click(); // Also exercise the readiness guard against an already queued click.
+    }
+    await pause(100);
+    if (window.webContents.getURL() !== services[3][1]) throw new Error('University menu navigated without VPN'); ++checks;
+    vpnReady = true; navigation.refresh();
+    navigation.menu.getMenuItemById('home').click();
+    await until(() => window.webContents.getURL() === START_URL && !window.webContents.isLoading());
     if (window.webContents.session !== browserSession) throw new Error('Navigation changed session');
     await window.webContents.executeJavaScript(`(() => {
       const a = document.createElement('a'); a.href = 'https://www.appigs.univ-avignon.fr/fixture.pdf';
@@ -110,6 +144,11 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     })()`);
     await until(() => downloads.records().some(record => record.name === 'popup-named.pdf' && record.state === 'completed'));
     if (popupPosts !== 3) throw new Error('Named popup lost POST'); ++checks;
+    const popupURL = named.webContents.getURL(), countBeforeMenu = windows.size;
+    navigationFor(named).menu.getMenuItemById('university-ent').click();
+    await until(() => window.webContents.getURL() === services[0][1] && !window.webContents.isLoading());
+    if (named.webContents.getURL() !== popupURL || windows.size !== countBeforeMenu)
+      throw new Error('Popup university menu did not target the initial APPIGS window'); ++checks;
     const before = windows.size;
     const refused = await window.webContents.executeJavaScript(`['https://example.com', 'file:///C:/Windows/win.ini', 'data:text/html,fixture'].every(url => window.open(url) === null)`);
     if (!refused || windows.size !== before) throw new Error('Out-of-policy popup accepted'); ++checks;
@@ -117,6 +156,13 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     await until(() => downloads.records().some(record => record.name === 'interruption-pilote.bin'));
     downloads.stop();
     await until(() => downloads.records().some(record => record.name === 'interruption-pilote.bin' && record.state === 'cancelled')); ++checks;
+    window.destroy();
+    for (const [id] of services) {
+      const item = navigationFor(named).menu.getMenuItemById(id);
+      if (item.enabled) throw new Error('University menu enabled after initial window closed');
+      item.click();
+    }
+    if (named.webContents.getURL() !== popupURL) throw new Error('University menu navigated a popup after initial window closed'); ++checks;
     return checks;
   } finally {
     downloads.dispose(); prefiller.clear(); for (const child of windows) if (!child.isDestroyed()) child.destroy();

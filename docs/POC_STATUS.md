@@ -86,6 +86,8 @@ Premier essai utilisateur : enregistrement confirmé explicitement, puis fermetu
 
 Installation fraîche sur VM sans OpenVPN, redémarrage requis et annulation du MSI/UAC non exécutés. Le lancement retient l’identité du bureau interactif plutôt que celle d’un autre administrateur saisi pour l’UAC ; ce cas avec deux comptes distincts reste à qualifier. Aucun succès n’est attribué à ces scénarios sur la seule base des tests locaux.
 
+Après essai utilisateur suivant une désinstallation, la capture montre un arrêt générique sans proposition d’installation. Le parcours a été corrigé : états absent/incomplet/incompatible séparés, proposition d’installation pour les deux premiers, détection d’architecture indépendante du registre d’environnement, transmission structurée de la cause et de l’étape d’erreur, progression MSI visible et commande `npm run openvpn:install`. Les 22 contrôles PowerShell couvrent l’orchestration avec effets simulés, plus un vrai refus de faux MSI avec résultat JSON et la lecture du code produit du paquet officiel en cache. L’installation compatible présente dans l’environnement de l’agent est toujours reconnue. L’utilisateur indique avoir déjà réinstallé OpenVPN et reporte le nouvel essai d’absence ; le correctif n’est donc pas encore confirmé par une nouvelle installation réelle.
+
 ## Environnement et intégrité
 
 - Windows x64 build 26200.9457 ; MSVC 14.44, SDK 10.0.26100.0 ; Electron 45.0.0 épinglé.

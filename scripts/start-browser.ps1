@@ -9,9 +9,22 @@ $out = Join-Path $root '.local\browser'
 New-Item -ItemType Directory -Path $out -Force | Out-Null
 if (!$Worker) {
     try {
-        $preparation = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\openvpn-setup.ps1') -Ensure
-        if ($LASTEXITCODE -ne 0) { throw 'Preparation OpenVPN annulee ou incomplete. Aucun tunnel demarre.' }
-        $OpenVpn = [string]($preparation | Select-Object -Last 1)
+        $setupResult = Join-Path $out ('setup-' + [Guid]::NewGuid().ToString('N') + '.json')
+        $setupLog = Join-Path $out 'openvpn-preparation.txt'
+        $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $preparation = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\openvpn-setup.ps1') -Ensure -ResultFile $setupResult 2>&1
+        $setupCode = $LASTEXITCODE; $ErrorActionPreference = $previous
+        $preparation | Out-File -LiteralPath $setupLog -Encoding utf8
+        if (!(Test-Path -LiteralPath $setupResult)) { throw "La preparation OpenVPN n'a pas retourne de resultat (code $setupCode). Diagnostic : $setupLog" }
+        $result = Get-Content -LiteralPath $setupResult -Raw | ConvertFrom-Json
+        Remove-Item -LiteralPath $setupResult
+        if ($result.Status -in @('Cancelled','RebootRequired')) {
+            Add-Type -AssemblyName System.Windows.Forms
+            [Windows.Forms.MessageBox]::Show($result.Message, 'MyNEIGE - OpenVPN', 'OK', 'Information') | Out-Null
+            exit $result.Code
+        }
+        if ($setupCode -ne 0 -or $result.Status -ne 'Ready') { throw ($result.Message + "`r`nEtape : " + $result.Stage + "`r`nDiagnostic : " + $setupLog) }
+        $OpenVpn = [string]$result.Path
         if (!(Test-Path -LiteralPath $OpenVpn -PathType Leaf)) { throw 'Moteur OpenVPN verifie introuvable.' }
     } catch {
         Add-Type -AssemblyName System.Windows.Forms

@@ -23,6 +23,8 @@ Le menu **Navigation** propose Précédent, Suivant et Accueil APPIGS. Les tél�
 
 L’enregistrement des identifiants est facultatif : protection Windows DPAPI, réutilisation après vérification Windows Hello et bouton de suppression sans déverrouillage. `npm run credentials:forget` permet aussi la suppression lorsque le pilote est fermé. Au démarrage, OpenVPN Community est vérifié ; s’il manque, MyNEIGE propose son téléchargement vérifié et son installation avec UAC. Voir [le fonctionnement et les limites](docs/J2_CREDENTIALS_SETUP.md).
 
+Pour lancer seulement l’installation/préparation d’OpenVPN : `npm run openvpn:install`. Une installation incomplète après désinstallation peut également déclencher la proposition d’installation/réparation. En cas d’échec, le lanceur affiche la cause et indique le diagnostic local.
+
 Le test du filtrage Windows nécessite une console administrateur :
 
 ```powershell

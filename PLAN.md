@@ -12,6 +12,8 @@ Extension J2 autorisée ensuite : enregistrement facultatif DPAPI par utilisateu
 
 Recette de cette extension : enregistrement réel puis réutilisation après Windows Hello, VPN et CAS sans ressaisie VPN confirmés par l’utilisateur sur deux lancements ; fermeture propre des deux sessions. Suppression de l’enregistrement réel sans demande Hello et désactivation du bouton de connexion Hello confirmées par l’utilisateur ; suppression DPAPI également vérifiée avec données fictives. Précontrôle WFP et régressions navigateur réussis. Détection du moteur installé, paquet officiel et faux paquet testés ; installation sur Windows propre et UAC avec un autre administrateur encore à qualifier.
 
+Retour de recette installation : proposition absent/incomplet corrigée après un essai suivant désinstallation ; erreurs détaillées, progression MSI et commande d’installation dédiée ajoutées. Vingt-deux contrôles PowerShell du parcours passent sans exécuter de MSI. La nouvelle installation réelle reste à confirmer séparément.
+
 Le code du pilote et son mode d’emploi figurent dans [README.md](README.md) et [docs/POC_WINDOWS.md](docs/POC_WINDOWS.md). Les résultats réellement obtenus sont consignés dans [docs/POC_STATUS.md](docs/POC_STATUS.md). Un prototype compilé ne vaut pas démonstration d’isolation complète.
 
 Le pilote crée un TAP dédié, applique sa quarantaine avant OpenVPN et contrôle les sorties par WFP et liaison explicite des sockets. Le mode console utilise WinHTTP ; le début de J2 ajoute un formulaire et une session Electron protégée. Relais et Electron utilisent désormais des jetons restreints de niveau moyen. Le packaging reste différé.

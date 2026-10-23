@@ -19,6 +19,8 @@ npm start            # Contrôleur élevé, formulaire et navigateur non adminis
 
 La navigation ne démarre qu’après validation du tunnel. Les mêmes identifiants sont préremplis une seule fois sur la page CAS vérifiée ; vous cliquez vous-même sur « SE CONNECTER ». La copie temporaire expire après 3 minutes. Voir [le pilote de préremplissage J2](docs/CAS_PREFILL.md). La session s’arrête à la fermeture du formulaire ou après 30 minutes.
 
+Le menu **Navigation** propose Précédent, Suivant et Accueil APPIGS. Les téléchargements demandent où enregistrer le fichier ; **Fichiers → Téléchargements** (`Ctrl+J`) affiche leur état et permet l’annulation. Aucun fichier n’est ouvert automatiquement. L’écran de connexion affiche un avertissement d’utilisation. Voir [ces ajouts J2](docs/J2_NAVIGATION_DOWNLOADS.md).
+
 Le test du filtrage Windows nécessite une console administrateur :
 
 ```powershell

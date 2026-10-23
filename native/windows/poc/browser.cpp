@@ -318,6 +318,9 @@ bool BrowserPilot::wantsStop() {
             line == "UI_CAS_PREFILL UNSUPPORTED" || line == "UI_CAS_PREFILL UNAVAILABLE" ||
             line == "UI_CAS_PREFILL EXPIRED")
             std::cout << "BROWSER_CAS_PREFILL status=" << line.substr(15) << std::endl;
+        if (line == "UI_DOWNLOAD STARTED" || line == "UI_DOWNLOAD COMPLETED" || line == "UI_DOWNLOAD CANCELLED" ||
+            line == "UI_DOWNLOAD INTERRUPTED" || line == "UI_DOWNLOAD REFUSED")
+            std::cout << "BROWSER_DOWNLOAD status=" << line.substr(12) << std::endl;
         require(line.rfind("UI_ERROR ", 0) != 0, "Browser reported a guarded navigation failure");
         if (line == "UI_STOP")
             return true;
@@ -359,6 +362,11 @@ int browserTest(const std::filesystem::path &projectRoot) {
         browser.send("TEST_CAS_PREFILL\n");
         require(browser.wait(30000) == "UI_CAS_TEST_DONE", "CAS prefill integration tests failed");
         std::cout << "BROWSER_CAS_TEST prefill=true manual_submit=true origin_guard=true csrf_preserved=true"
+                  << std::endl;
+        browser.send("TEST_BROWSER_FEATURES\n");
+        require(browser.wait(30000) == "UI_BROWSER_FEATURES_DONE",
+                "Browser navigation/download integration tests failed");
+        std::cout << "BROWSER_FEATURES_TEST navigation=true downloads=true cookies_preserved=true cancellation=true"
                   << std::endl;
         browser.stop();
         firewall.clear();

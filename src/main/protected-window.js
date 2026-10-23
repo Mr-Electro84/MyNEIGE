@@ -1,23 +1,35 @@
 'use strict';
 const path = require('node:path');
 const { allowedURL } = require('./policy');
-function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show }) {
-  const window = new BrowserWindow({ title: 'MyNEIGE · Navigation universitaire', width: 1200, height: 850, show,
-    webPreferences: { session, preload: path.join(__dirname, '../preload/cas.js'), nodeIntegration: false,
-      contextIsolation: true, sandbox: true, webSecurity: true, webRTCIPHandlingPolicy: 'disable_non_proxied_udp', navigateOnDragDrop: false } });
+const { installNavigation } = require('./navigation');
+function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready = () => true, Menu = require('electron').Menu, windowOptions = {} }) {
+  // Preserve Chromium's popup options (including its opener), then enforce our
+  // session and security preferences. Never replay popup requests with loadURL:
+  // doing so drops form POST data and breaks the returned WindowProxy.
+  const window = new BrowserWindow({ ...windowOptions, title: 'MyNEIGE · Navigation universitaire', width: 1200, height: 850, show,
+    webPreferences: { ...windowOptions.webPreferences, session, preload: path.join(__dirname, '../preload/cas.js'), nodeIntegration: false,
+      nodeIntegrationInWorker: false, nodeIntegrationInSubFrames: false, contextIsolation: true, sandbox: true, webSecurity: true,
+      allowRunningInsecureContent: false, webRTCIPHandlingPolicy: 'disable_non_proxied_udp', navigateOnDragDrop: false } });
   prefiller.bind(window.webContents);
   owners.set(window.webContents, prefiller);
+  downloads?.track(window);
+  installNavigation({ window, Menu, ready, downloads });
   window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   for (const event of ['will-navigate', 'will-redirect', 'will-frame-navigate']) {
     window.webContents.on(event, (event, url) => { if (!allowedURL(typeof url === 'string' ? url : event.url)) event.preventDefault(); });
   }
   window.webContents.on('will-attach-webview', event => event.preventDefault());
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (allowedURL(url)) {
-      const popup = createProtectedWindow({ BrowserWindow, session, prefiller, owners, show });
-      popup.loadURL(url).catch(() => {});
-    }
-    return { action: 'deny' };
+    const opener = window.webContents.getURL();
+    const httpsPage = value => { try { return new URL(value).protocol === 'https:' && allowedURL(value); } catch { return false; } };
+    // An initial empty document is used by sites to prepare a popup before
+    // submitting a form. Only a university page may create one.
+    if (!ready() || !httpsPage(opener) || !(httpsPage(url) || url === 'about:blank')) return { action: 'deny' };
+    return { action: 'allow', createWindow: options => {
+      const popup = createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready, Menu, windowOptions: options });
+      downloads?.expectNavigation(popup.webContents, httpsPage(url) ? url : opener);
+      return popup.webContents;
+    } };
   });
   return window;
 }

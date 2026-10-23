@@ -6,11 +6,13 @@ Révision : 23 octobre 2026.
 
 Extension J2 autorisée le 23 octobre : réutiliser temporairement les identifiants VPN pour préremplir la vraie page CAS. Validation du formulaire laissée à l’utilisateur ; aucune soumission automatique. Détails : [docs/CAS_PREFILL.md](docs/CAS_PREFILL.md).
 
+Extension J2 suivante : téléchargements Chromium dans la session protégée, choix de destination, suivi/annulation, menu natif Précédent/Suivant/Accueil et avertissement de connexion. [Contrat et tests](docs/J2_NAVIGATION_DOWNLOADS.md).
+
 Le code du pilote et son mode d’emploi figurent dans [README.md](README.md) et [docs/POC_WINDOWS.md](docs/POC_WINDOWS.md). Les résultats réellement obtenus sont consignés dans [docs/POC_STATUS.md](docs/POC_STATUS.md). Un prototype compilé ne vaut pas démonstration d’isolation complète.
 
 Le pilote crée un TAP dédié, applique sa quarantaine avant OpenVPN et contrôle les sorties par WFP et liaison explicite des sockets. Le mode console utilise WinHTTP ; le début de J2 ajoute un formulaire et une session Electron protégée. Relais et Electron utilisent désormais des jetons restreints de niveau moyen. Le packaging reste différé.
 
-**Résultat au 23 octobre : VPN réel, DNS UDP/TCP et HTTPS APPIGS `302` ; captures physique/TAP, application témoin simultanée, perte/restauration de la route propre, arrêt VPN/relais et crash brutal du contrôleur exécutés. Précontrôle Electron IPv4/IPv6/UDP, enfant, sandbox et authentification du proxy par Chromium réussis. Les 42 tests natifs/JavaScript passent ; neuf scénarios de formulaire passent dans Chromium. J2 : préremplissage réel des deux champs CAS et accès APPIGS après clic manuel confirmés par l’utilisateur ; fermeture avec code 0. La clôture complète de J1 reste conditionnée aux cas non exécutés, notamment R7.**
+**Résultat au 23 octobre : VPN réel, DNS UDP/TCP et HTTPS APPIGS `302` ; captures physique/TAP, application témoin simultanée, perte/restauration de la route propre, arrêt VPN/relais et crash brutal du contrôleur exécutés. Précontrôle Electron IPv4/IPv6/UDP, enfant, sandbox et authentification du proxy par Chromium réussis. Les 48 tests natifs/JavaScript passent ; neuf scénarios CAS et douze vérifications de navigation/téléchargements passent dans Chromium, dont sous WFP. J2 : préremplissage réel CAS, accès APPIGS après clic manuel, menus et enregistrement d’un fichier exporté en pop-up confirmés par l’utilisateur ; avertissement de connexion ajouté et vérifié visuellement. La clôture complète de J1 reste conditionnée aux cas non exécutés, notamment R7.**
 
 ## 1. Verdict et état de la validation
 
@@ -212,7 +214,7 @@ Annulation/fermeture -> BLOCAGE_DES_FLUX -> NETTOYAGE -> ARRET
 - Installer la protection avant tout processus susceptible d’émettre. Tester séparément le développement utilisant un `electron.exe` partagé pour ne pas bloquer d’autres projets.
 - Déterminer les domaines admis à partir des redirections réelles ; les domaines CAS et ressources annexes sont encore inconnus.
 - Garder les fenêtres de connexion nécessaires dans la session protégée ; aucune ouverture externe automatique.
-- Téléchargements réseau protégés ; l’ouverture dans une application tierce sort du périmètre et n’est pas automatique.
+- Téléchargements HTTPS universitaires et `blob` de même origine dans la session protégée, avec sauvegarde choisie par l’utilisateur, suivi et annulation. L’ouverture dans une application tierce sort du périmètre et n’est pas automatique.
 
 ## 8. Organisation et packaging prévus
 

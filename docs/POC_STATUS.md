@@ -4,7 +4,7 @@
 
 ## Résultats acquis
 
-- Compilation MSVC x64 C++20, `/W4 /WX`, SDK Windows 26100 ; 27 tests natifs et 15 tests JavaScript réussis (42 au total).
+- Compilation MSVC x64 C++20, `/W4 /WX`, SDK Windows 26100 ; 27 tests natifs et 21 tests JavaScript réussis (48 au total).
 - Connexion universitaire réelle : certificat serveur vérifié, `CONNECTED`, IPv4, passerelle et deux DNS poussés ; attente de `IpDadStatePreferred` avant autorisation du relais.
 - DNS APPIGS UDP et TCP via le tunnel ; HEAD HTTPS avec certificat vérifié, réponse `302`, sondes répétées. La console ne suit pas les redirections et ne collecte pas de corps de page.
 - Proxy sans secret refusé (`407`) ; autre exécutable explicitement lié au TAP refusé (`WSAEACCES` 10013).
@@ -58,13 +58,23 @@ L’essai réel via formulaire établit le VPN et obtient le HEAD HTTPS `302`, p
 
 Fermeture réelle du formulaire : processus arrêtés, requêtes après perte VPN puis relais bloquées, nettoyage et comparaison finale du réseau réussis, sortie `0`. Diagnostics : `.local/browser/live-session.txt`, `.local/browser/exit-code.txt`. Le précontrôle local complet est dans `.local/poc/browser-test.txt`. Les captures J1 ci-dessus concernent le mode console ; une capture complète du parcours navigateur/CAS reste à acquérir.
 
-La politique provisoire de navigation admet HTTPS/WSS 443 pour `univ-avignon.fr` et ses sous-domaines. Les domaines exacts du parcours doivent être identifiés avant resserrement. Permissions, téléchargements et ouvertures externes refusés. Le préremplissage autorisé en J2 est plus strict : origine CAS exacte et service APPIGS uniquement ; le clic reste manuel.
+La politique provisoire de navigation admet HTTPS/WSS 443 pour `univ-avignon.fr` et ses sous-domaines. Les domaines exacts du parcours doivent être identifiés avant resserrement. Permissions et ouvertures externes refusées ; téléchargements admis dans la même session après contrôle de provenance et redirections. Le préremplissage autorisé en J2 est plus strict : origine CAS exacte et service APPIGS uniquement ; le clic reste manuel.
 
 ### Extension J2 — préremplissage CAS
 
 Implémentation et contrat dans [CAS_PREFILL.md](CAS_PREFILL.md). Les cinq tests Node supplémentaires passent. Neuf scénarios Chromium passent avec les mêmes fenêtres, preload et gestion IPC que le pilote réel : remplissage et caractères spéciaux, conservation des champs cachés/cookies, zéro soumission automatique, renderer sans Node/bridge, refus d’autres origines/services/actions, de saisies existantes, de doublons, d’un état de flux absent et des sous-cadres, annulation et non-réutilisation après rechargement. Exécutés via `browser:test` sous WFP (sortie 0), puis via le lanceur sans UAC `test:cas` (sortie 0). Aucun compte réel utilisé par ces tests ; aucun jeton du HTML utilisateur copié dans les fixtures.
 
 L’essai réel atteint CAS `200`, produit `BROWSER_CAS_PREFILL status=PREFILLED`, puis APPIGS `200`. Le contenu des champs n’est pas lu par le diagnostic. L’utilisateur confirme explicitement les deux champs préremplis et l’accès APPIGS après son clic sur « SE CONNECTER ». Le parcours normal VPN → CAS prérempli → clic manuel → APPIGS est donc acquis sur cette machine. Fermeture réelle : pertes VPN/relais bloquées, nettoyage et comparaison réseau réussis, sortie `0`. Les diagnostics locaux sont `.local/browser/live-session.txt` et `.local/browser/exit-code.txt` ; le profil source reste inchangé.
+
+### Extension J2 — menus, fichiers et avertissement
+
+[Contrat et mode d’emploi](J2_NAVIGATION_DOWNLOADS.md). Menu natif Précédent/Suivant/Accueil APPIGS, raccourcis et suivi des téléchargements ajoutés aux fenêtres protégées. Sauvegarde par Chromium avec destination choisie ; prise en charge HTTPS et `blob` de même origine, contrôle des redirections et noms proposés, annulation sur fermeture/blocage, aucune ouverture automatique. L’avertissement de connexion est affiché avant les champs et a été vérifié visuellement sans identifiants.
+
+Six tests Node supplémentaires passent. Les douze vérifications Chromium passent : historique précédent/suivant, accueil dans la même session, téléchargement fictif HTTPS avec contenu comparé et magasin de cookies conservé, suivi, fichier `blob`, annulation d’un transfert réel en cours ; POST vers un nouveau pop-up, préparation d’une fenêtre vide par JavaScript, réutilisation d’une fenêtre nommée, maintien de sa session et de son isolation, refus des ouvertures hors politique. Réussite sans UAC (`test:browser`), puis sous WFP (`browser:test`, code 0). Le test utilise des réponses locales interceptées et des fichiers sous `.local/` ; il ne prouve pas la transmission des cookies à un serveur distant. Le préremplissage CAS est aussi retesté sous WFP, avec ses neuf scénarios réussis.
+
+La recette réelle confirme le fonctionnement des menus et l’enregistrement d’un fichier exporté par APPIGS dans un pop-up séparé. Après correction du contrôleur de fenêtres, le journal observe `BROWSER_DOWNLOAD status=STARTED`, puis `COMPLETED` ; l’utilisateur confirme explicitement « Oui, fichier enregistré avec succès ». Aucun contenu de fichier universitaire n’a été inspecté. La session a ensuite été fermée proprement (sortie 0), avec blocage des requêtes après arrêt du VPN puis du relais et nettoyage final réussi. Diagnostics locaux : `.local/browser/live-session.txt` et `.local/browser/exit-code.txt`.
+
+Le premier essai avait révélé l’échec des exports en pop-up : le contrôleur recréait ces fenêtres avec `loadURL`, ce qui perdait les POST et le lien avec la page d’origine. La correction conserve la création native Chromium tout en appliquant la session et les protections du pilote. Les cinq scénarios de pop-up ajoutés couvrent cette régression. Cette première session avait été fermée proprement (sortie 0).
 
 ## Environnement et intégrité
 

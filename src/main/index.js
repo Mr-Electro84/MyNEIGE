@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, session, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, session, Menu, dialog } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -10,6 +10,8 @@ const { pathToFileURL } = require('node:url');
 const { START_URL, allowedURL, validateCredentials } = require('./policy');
 const { CasPrefill, registerCasIPC } = require('./cas-prefill');
 const { createProtectedWindow } = require('./protected-window');
+const { createDownloads } = require('./downloads');
+const { protectRequests } = require('./session-policy');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
@@ -27,7 +29,6 @@ Menu.setApplicationMenu(null);
 let form, webSession, remote, proxyPort, proxySecret, authPending = false, stopping = false, testMode = false;
 const formPath = path.join(__dirname, '../renderer/index.html');
 const formURL = pathToFileURL(formPath).href;
-const domains = new Set();
 const networkErrors = new Set(['ERR_FAILED', 'ERR_ABORTED', 'ERR_BLOCKED_BY_CLIENT', 'ERR_ACCESS_DENIED',
   'ERR_NETWORK_ACCESS_DENIED', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_TUNNEL_CONNECTION_FAILED',
   'ERR_PROXY_AUTH_REQUESTED', 'ERR_PROXY_AUTH_UNSUPPORTED', 'ERR_NO_SUPPORTED_PROXIES',
@@ -36,7 +37,7 @@ const networkErrors = new Set(['ERR_FAILED', 'ERR_ABORTED', 'ERR_BLOCKED_BY_CLIE
   'ERR_CERT_COMMON_NAME_INVALID', 'ERR_CERT_DATE_INVALID', 'ERR_SSL_PROTOCOL_ERROR']);
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
-let vpnReady = false;
+let vpnReady = false, downloads;
 const prefillOwners = new WeakMap();
 const casPrefill = new CasPrefill({ ready: () => vpnReady && !stopping, report: status => {
   send(`UI_CAS_PREFILL ${status}`);
@@ -131,7 +132,7 @@ async function control(line) {
     send('BROWSER_STAGE CHILD_BLOCKED');
     const localSession = session.fromPartition(`form-${Date.now()}`, { cache: false });
     localSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') }));
-    form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', width: 620, height: 790, show: !testMode,
+    form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', width: 680, height: 940, show: !testMode,
       webPreferences: { session: localSession, preload: path.join(__dirname, '../preload/form.js'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
     send('BROWSER_STAGE FORM_CREATED');
     form.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -167,10 +168,15 @@ async function control(line) {
   } else if (line === 'TEST_CAS_PREFILL' && form && testMode) {
     await require('./cas-prefill-test').run({ session, protectedWindow, CasPrefill });
     send('UI_CAS_TEST_DONE');
+  } else if (line === 'TEST_BROWSER_FEATURES' && form && testMode) {
+    await require('./browser-features-test').run({ session, CasPrefill, directory: path.join(app.getPath('userData'), 'download-fixtures'),
+      protectedWindow: (browserSession, prefiller, fixtureDownloads) => createProtectedWindow({ BrowserWindow,
+        session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, show: false }) });
+    send('UI_BROWSER_FEATURES_DONE');
   } else if (line === 'AUTH_REQUIRED' && form) {
     authPending = true; state('AUTH_REQUIRED');
   } else if (parts[0] === 'STATE' && parts.length === 2 && ['BLOCKED', 'ERROR', 'CONNECTING'].includes(parts[1])) {
-    if (parts[1] !== 'CONNECTING') { vpnReady = false; casPrefill.clear(); }
+    if (parts[1] !== 'CONNECTING') { vpnReady = false; casPrefill.clear(); downloads?.stop(); }
     state(parts[1]);
     if (parts[1] === 'BLOCKED' && remote && !remote.isDestroyed()) remote.destroy();
   } else if (parts[0] === 'VPN_READY' && parts.length === 3 && form && !proxySecret) {
@@ -204,15 +210,9 @@ async function openProtectedSession() {
   webSession = session.fromPartition(`navigation-${Date.now()}`, { cache: false });
   webSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   webSession.setPermissionCheckHandler(() => false);
-  webSession.on('will-download', event => event.preventDefault());
-  webSession.webRequest.onBeforeRequest((details, callback) => {
-    const allowed = allowedURL(details.url);
-    if (allowed) {
-      const host = new URL(details.url).hostname;
-      if (!domains.has(host)) { domains.add(host); send(`UI_DOMAIN ${host}`); }
-    }
-    callback({ cancel: !allowed });
-  });
+  downloads = createDownloads({ session: webSession, ready: () => vpnReady && !stopping,
+    directory: app.getPath('downloads'), dialog, report: status => send(`UI_DOWNLOAD ${status}`) });
+  protectRequests(webSession, host => send(`UI_DOMAIN ${host}`));
   webSession.webRequest.onCompleted(details => {
     if (details.resourceType === 'mainFrame' && allowedURL(details.url)) send(`UI_PAGE ${new URL(details.url).hostname} ${details.statusCode}`);
   });
@@ -231,12 +231,14 @@ async function openProtectedSession() {
   await remote.loadURL(START_URL);
 }
 function protectedWindow(browserSession = webSession, prefiller = casPrefill) {
-  return createProtectedWindow({ BrowserWindow, session: browserSession, prefiller, owners: prefillOwners, show: !testMode });
+  return createProtectedWindow({ BrowserWindow, session: browserSession, prefiller, owners: prefillOwners, show: !testMode,
+    downloads: browserSession === webSession ? downloads : undefined, ready: () => (testMode || vpnReady) && !stopping });
 }
 function shutdown(failed = false) {
   if (stopping) return;
   stopping = true; authPending = false; proxySecret = undefined;
   vpnReady = false; casPrefill.clear();
+  downloads?.stop();
   for (const window of BrowserWindow.getAllWindows()) window.destroy();
   if (webSession) webSession.closeAllConnections().finally(() => app.exit(failed ? 1 : 0)); else app.exit(failed ? 1 : 0);
 }

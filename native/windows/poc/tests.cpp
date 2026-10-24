@@ -80,6 +80,52 @@ int selfTest() {
                                  "drive.google.com", "storage.googleapis.com", "youtube.com.", "h5p.com.evil.test"})
             require(!browserHost(host), "Browser dependency allowlist escaped");
     });
+    test("routage public explicite et absence de repli pour les services protégés", [&] {
+        for (const auto &host : {"partage.univ-avignon.fr", "sp.partage.renater.fr", "webmail.partage.renater.fr",
+            "www.youtube.com", "www.youtube-nocookie.com", "rr1.googlevideo.com", "i.ytimg.com", "avignon.h5p.com",
+            "cdn.jsdelivr.net", "cdnjs.cloudflare.com"})
+            require(publicServiceHost(host) && browserHost(host), "Missing public service route");
+        for (const auto &host : {"www.appigs.univ-avignon.fr", "cas.univ-avignon.fr", "idp.univ-avignon.fr",
+            "ent.univ-avignon.fr", "cloud.univ-avignon.fr", "e-uapv2026.univ-avignon.fr", "evil.test",
+            "partage.univ-avignon.fr.evil.test", "evilrenater.fr", "cdn.jsdelivr.net.evil.test"})
+            require(!publicServiceHost(host), "Protected or unknown service escaped to the public network");
+        const auto header = publicConnectHeader("www.youtube.com", "Basic local-fixture");
+        const auto request = parseConnect(header);
+        require(request.host == "www.youtube.com" && request.authorization == "Basic local-fixture", "Public proxy lost CONNECT identity");
+        rejects([] { publicConnectHeader("cas.univ-avignon.fr", "Basic local-fixture"); });
+        rejects([] { publicConnectHeader("www.youtube.com", "Basic x\r\nInjected: value"); });
+    });
+    test("la saturation publique ne consomme pas le quota VPN", [] {
+        RelaySlots slots;
+        for (unsigned i = 0; i < RelaySlots::limit; ++i) require(slots.acquire(true), "Public slot missing");
+        require(!slots.acquire(true), "Public quota exceeded");
+        for (unsigned i = 0; i < RelaySlots::limit; ++i) require(slots.acquire(false), "Public traffic exhausted VPN quota");
+        require(!slots.acquire(false), "VPN quota exceeded");
+        slots.release(true); require(slots.acquire(true), "Released slot unavailable");
+        for (unsigned i = 0; i < RelaySlots::limit; ++i) { slots.release(true); slots.release(false); }
+        require(slots.publicActive == 0 && slots.protectedActive == 0, "Relay quota leaked");
+    });
+    test("la sortie publique refuse les adresses locales, privées et réservées", [] {
+        for (const auto &address : {"127.0.0.1", "10.40.0.1", "192.168.1.1", "172.16.0.1", "169.254.1.1",
+            "100.64.1.1", "0.0.0.0", "224.0.0.1", "255.255.255.255", "198.18.0.1", "192.0.2.1"})
+            require(!publicDestination(ipv4(address)), "Non-public destination escaped");
+        require(publicDestination(ipv4("194.254.242.44")) && publicDestination(ipv4("142.251.154.4")),
+                "Public target incorrectly refused");
+    });
+    test("les configurations des deux relais restent séparées et sans injection", [&] {
+        Adapter network;
+        network.name = "fixture"; network.guid = "fixture-guid";
+        const std::string token(64, 'a');
+        require(relayConfiguration(network, {0x01010101}, "partage.univ-avignon.fr", token, "public")
+                    .rfind("MYNEIGE_PUBLIC_V1\n", 0) == 0, "Wrong public relay protocol");
+        require(relayConfiguration(network, {0x01010101}, "www.appigs.univ-avignon.fr", token, "university", 12345)
+                    .rfind("MYNEIGE_RELAY_V4\n", 0) == 0, "Wrong protected relay protocol");
+        rejects([&] { relayConfiguration(network, {0x01010101}, "cas.univ-avignon.fr", token, "public"); });
+        rejects([&] { relayConfiguration(network, {0x01010101}, "www.appigs.univ-avignon.fr", token, "university"); });
+        rejects([&] { relayConfiguration(network, {}, "partage.univ-avignon.fr", token, "public"); });
+        network.name = "injected\nvalue";
+        rejects([&] { relayConfiguration(network, {0x01010101}, "partage.univ-avignon.fr", token, "public"); });
+    });
     const std::string base =
         "dev tun\nclient\nremote vpn.example.test 443 tcp-client\nauth-user-pass\nremote-cert-tls "
         "server\nncp-ciphers AES-128-GCM:AES-128-CBC\nauth SHA256\n<ca>\n-----BEGIN CERTIFICATE-----\nYWJj\n-----END "
@@ -177,6 +223,26 @@ int selfTest() {
     test("proxy short/incomplete headers rejected", [&] {
         rejects([] { parseConnect("abc"); });
         rejects([] { parseConnect("CONNECT target.test:443 HTTP/1.1\r\n"); });
+    });
+    test("relay diagnostics contain only validated generated metadata", [] {
+        require(safeRelayDiagnostic("DNS_ATTEMPT_FAILED host=www.youtube.com stage=UDP_PARSE wsa=0 rcode=5 reason=RCODE"),
+                "DNS diagnostic rejected");
+        require(safeRelayDiagnostic("RELAY_REQUEST_FAILED host=partage.univ-avignon.fr stage=CONNECT wsa=10060") &&
+                    safeRelayDiagnostic("RELAY_CAPACITY limit=16"), "Relay diagnostic rejected");
+        for (const auto &line : {"RELAY_REQUEST_FAILED host=www.youtube.com/path?secret stage=DNS wsa=0",
+             "RELAY_REQUEST_FAILED host=www.youtube.com stage=DNS wsa=0 token=secret",
+             "DNS_ATTEMPT_FAILED host=www.youtube.com stage=UDP_PARSE wsa=0 rcode=0 reason=secret",
+             "DNS_ATTEMPT_FAILED host=www.youtube.com stage=UDP_PARSE wsa=0 rcode=50 reason=RCODE"})
+            require(!safeRelayDiagnostic(line), "Unsafe relay diagnostic accepted");
+        require(browserRequestDiagnostic("UI_REQUEST_ERROR www.youtube.com subFrame ERR_TUNNEL_CONNECTION_FAILED") ==
+                    "BROWSER_REQUEST_ERROR host=www.youtube.com type=subFrame error=ERR_TUNNEL_CONNECTION_FAILED",
+                "Browser diagnostic rejected");
+        require(browserRequestDiagnostic("UI_REQUEST_BLOCKED accounts.google.com subFrame") ==
+                    "BROWSER_REQUEST_BLOCKED host=accounts.google.com type=subFrame", "Browser block diagnostic rejected");
+        for (const auto &line : {"UI_REQUEST_ERROR www.youtube.com/path?secret subFrame ERR_FAILED",
+             "UI_REQUEST_ERROR www.youtube.com subFrame secret", "UI_REQUEST_BLOCKED www.youtube.com secret",
+             "UI_REQUEST_BLOCKED www.youtube.com subFrame token=secret"})
+            require(browserRequestDiagnostic(line).empty(), "Unsafe browser diagnostic accepted");
     });
     test("proxy authentication encoding", [] {
         require(basic64("myneige:secret") == "bXluZWlnZTpzZWNyZXQ=" && constantEqual("abc", "abc") &&

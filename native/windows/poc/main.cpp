@@ -25,6 +25,8 @@ int wmain(int argc, wchar_t **argv) {
             return neige::selfTest();
         if (command == "relay-worker")
             return neige::relayWorker();
+        if (command == "public-relay-worker")
+            return neige::relayWorker(true);
         if (command == "security-probe")
             return neige::securityProbe();
         if (command == "privilege-test")
@@ -100,6 +102,8 @@ int wmain(int argc, wchar_t **argv) {
         }
         if (command == "browser-test")
             return neige::browserTest(options.projectRoot);
+        if (command == "public-network-test")
+            return neige::publicNetworkTest();
         if (command == "browse") {
             options.browserMode = true;
             options.seconds = 1800;

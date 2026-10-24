@@ -341,6 +341,21 @@ bool constantEqual(const std::string &a, const std::string &b);
 bool validHost(const std::string &host);
 bool universityHost(const std::string &host);
 bool browserHost(const std::string &host);
+bool publicServiceHost(const std::string &host);
+bool publicDestination(uint32_t address);
+struct RelaySlots {
+    static constexpr unsigned limit = 32;
+    std::atomic<unsigned> publicActive{0}, protectedActive{0};
+    bool acquire(bool publicRoute) {
+        auto &counter = publicRoute ? publicActive : protectedActive;
+        if (counter.fetch_add(1) < limit) return true;
+        --counter; return false;
+    }
+    void release(bool publicRoute) noexcept { --(publicRoute ? publicActive : protectedActive); }
+};
+std::string publicConnectHeader(const std::string &host, const std::string &authorization);
+bool safeRelayDiagnostic(const std::string &line);
+std::string browserRequestDiagnostic(const std::string &line);
 struct ConnectRequest {
     std::string host;
     std::string authorization;

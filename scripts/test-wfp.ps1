@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Elevate, [switch]$ElevatedChild, [ValidateSet('wfp-test','adapter-test','auth-preflight','management-test','privilege-test','browser-test','all')][string]$TestCommand = 'wfp-test')
+param([switch]$Elevate, [switch]$ElevatedChild, [ValidateSet('wfp-test','adapter-test','auth-preflight','management-test','privilege-test','browser-test','public-network-test','all')][string]$TestCommand = 'wfp-test')
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $binary = Join-Path $repoRoot '.local\poc\myneige-poc.exe'

@@ -142,6 +142,11 @@ std::string BrowserPilot::wait(DWORD milliseconds) {
             std::cout << line << std::endl;
         if (line.rfind("UI_ERROR ", 0) == 0)
             std::cout << line << std::endl;
+        const auto requestDiagnostic = browserRequestDiagnostic(line);
+        if (!requestDiagnostic.empty()) {
+            std::cout << requestDiagnostic << std::endl;
+            continue;
+        }
         if (line.rfind("UI_", 0) == 0)
             return line;
     }
@@ -320,6 +325,9 @@ bool BrowserPilot::wantsStop() {
         auto line = poll();
         if (line.empty())
             return false;
+        const auto requestDiagnostic = browserRequestDiagnostic(line);
+        if (!requestDiagnostic.empty())
+            std::cout << requestDiagnostic << std::endl;
         if (line.rfind("UI_NET_ERROR ", 0) == 0 && line.size() < 120 &&
             line.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789 =-", 13) == std::string::npos)
             std::cout << "BROWSER_NETWORK " << line.substr(13) << std::endl;
@@ -369,6 +377,8 @@ int browserTest(const std::filesystem::path &projectRoot) {
     BrowserPilot browser;
     try {
         firewall.install(staging.executable.wstring(), nullptr);
+        Job publicTestJob;
+        publicRelayChecks(publicTestJob, firewall, staging);
         browser.prepare(staging, projectRoot);
         browser.launch(firewall, true);
         browser.send("TEST_VAULT\n");

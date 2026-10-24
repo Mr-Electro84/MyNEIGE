@@ -37,6 +37,17 @@ test('H5P can bootstrap the YouTube API and thumbnails before the player exists'
   assert(!embeddedRequestAllowed({ ...f.request, frame: f.top }));
   assert(!embeddedRequestAllowed({ ...f.request, frame: f.top, url: 'https://www.youtube.com/iframe_api', resourceType: 'xhr' }));
 });
+test('les CDN des activités sont admis depuis le cours, uniquement comme scripts ou styles', () => {
+  const f = fixture();
+  for (const host of ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net']) {
+    for (const resourceType of ['script', 'stylesheet']) assert(embeddedRequestAllowed({ ...f.request,
+      frame: f.top, resourceType, url: `https://${host}/library.js` }));
+    for (const resourceType of ['mainFrame', 'subFrame', 'xhr']) assert(!embeddedRequestAllowed({ ...f.request,
+      frame: f.top, resourceType, url: `https://${host}/library.js` }));
+  }
+  f.top.url = 'https://evil.test/';
+  assert(!embeddedRequestAllowed({ ...f.request, frame: f.top, resourceType: 'script', url: 'https://cdn.jsdelivr.net/library.js' }));
+});
 test('player resources and local MediaSource stay within the embedded course context', () => {
   const f = fixture();
   for (const host of ['youtubei.googleapis.com', 'youtube.googleapis.com', 'jnn-pa.googleapis.com', 'yt3.ggpht.com', 'www.gstatic.com'])

@@ -2,7 +2,7 @@
 
 ## Fonctionnement
 
-Le menu Université propose **Mail** (`https://partage.univ-avignon.fr/`) et **Nextcloud** (`https://cloud.univ-avignon.fr/`). Ces liens utilisent la fenêtre principale et sa session existante. Les destinations `renater.fr` et leurs sous-domaines sont admis en HTTPS/WSS sur 443, y compris pour les redirections d'authentification, les ressources du webmail et les téléchargements de pièces jointes. Le préremplissage CAS reste limité à son parcours APPIGS vérifié, sans soumission automatique.
+Le menu Université propose **Mail** (`https://partage.univ-avignon.fr/`) et **Nextcloud** (`https://cloud.univ-avignon.fr/`). Ces liens utilisent la fenêtre principale et sa session existante. Mail/PARTAGE et les destinations `renater.fr` et leurs sous-domaines utilisent la connexion Internet habituelle en HTTPS/WSS sur 443, y compris pour les ressources du webmail et les pièces jointes. Nextcloud et les redirections vers les pages d'authentification universitaires restent dans le VPN. Le préremplissage CAS reste limité à son parcours APPIGS vérifié, sans soumission automatique.
 
 Toutes les pages HTTPS de `univ-avignon.fr` et de ses sous-domaines peuvent intégrer les lecteurs YouTube standards (`youtube.com/embed/…`) et sans cookies (`youtube-nocookie.com/embed/…`). L'autorisation concerne aussi les lecteurs imbriqués dans une activité H5P universitaire, une iframe `srcdoc` ou une activité distante `*.h5p.com/content/…/embed` / `h5p.org/h5p/embed/…`.
 
@@ -16,11 +16,37 @@ La page principale doit rester universitaire et toute la chaîne des cadres doit
 | Flux vidéo et miniatures | `*.googlevideo.com`, `*.ytimg.com` |
 | API et ressources du lecteur | `youtubei.googleapis.com`, `youtube.googleapis.com`, `jnn-pa.googleapis.com`, `yt3.ggpht.com`, `www.gstatic.com`, `fonts.gstatic.com` |
 | Script complémentaire du lecteur | `www.google.com/js/…`, uniquement dans le contexte YouTube |
-| Ressources H5P distantes | `*.h5p.com`, `*.h5p.org`, `*.h5p.io`, `cdnjs.cloudflare.com`, `fonts.googleapis.com`, `fonts.gstatic.com`, uniquement dans le contexte H5P |
+| Ressources H5P distantes | `*.h5p.com`, `*.h5p.org`, `*.h5p.io`, `cdnjs.cloudflare.com`, `fonts.googleapis.com`, `fonts.gstatic.com`, dans le contexte H5P |
+| Bibliothèques du cours | `cdnjs.cloudflare.com`, `cdn.jsdelivr.net`, uniquement scripts/styles dans un contexte universitaire admis |
 
 Les API `/iframe_api`, `/player_api` et les scripts `/s/player/…` de YouTube peuvent être chargés directement par la page universitaire : H5P les utilise avant de créer le lecteur. Les miniatures `ytimg.com` et les scripts `h5p-resizer.js` des domaines H5P sont également utilisables par cette page. Les flux `googlevideo.com` ne sont admis qu'à l'intérieur d'un lecteur YouTube. Les URL MediaSource `blob:` sont locales et limitées à l'origine du lecteur.
 
-Le relais CONNECT natif admet ces noms sur 443 ; Electron impose en complément les chemins et la provenance des iframes, que le relais TLS ne peut pas inspecter. Les nouveaux domaines sont résolus par les DNS du tunnel, et les connexions restent liées à son interface. Aucune exception WFP directe, modification du proxy système, route physique ou résolution DNS hors VPN n'est ajoutée. Les domaines externes effectivement admis apparaissent dans les diagnostics, sans URL complète ni contenu.
+Electron impose les chemins et la provenance des iframes, que les relais CONNECT/TLS ne peuvent pas inspecter. Les domaines effectivement admis apparaissent dans les diagnostics, sans URL complète ni contenu.
+
+## Routage explicite approuvé le 25 octobre 2026
+
+| Destination | Réseau et résolution DNS |
+| --- | --- |
+| `partage.univ-avignon.fr` exactement, `renater.fr` et sous-domaines | Connexion habituelle et DNS de cette interface |
+| YouTube/H5P externes et dépendances du tableau ci-dessus | Connexion habituelle et DNS de cette interface, sous réserve du filtrage de contexte Electron |
+| Autres domaines universitaires : APPIGS, CAS, IdP, ENT, Moodle, Nextcloud, etc. | VPN obligatoire et DNS du tunnel |
+| Domaine non autorisé | Refusé |
+
+Il s'agit d'une séparation définie par domaine, sans tentative de repli après une erreur réseau. Les activités H5P et leurs données hébergées par l'université restent protégées ; seuls les hébergements/lecteurs et ressources externes listés utilisent le réseau habituel. Une redirection SAML/CAS de PARTAGE vers un domaine universitaire reprend automatiquement la voie VPN, dans la même session Chromium et avec ses cookies habituels.
+
+Electron conserve son unique proxy local authentifié et sa quarantaine WFP. Le relais VPN classe les destinations avant toute résolution DNS : un service public est transmis à un second proxy local authentifié, porté par une image native distincte. Le second relais refuse les destinations protégées et inconnues avant résolution, même avec un secret proxy valide. Les adresses privées, locales, de test et réservées obtenues pour un nom public sont refusées. Aucune désactivation de TLS ou du sandbox n'est nécessaire.
+
+Le relais public n'est autorisé par WFP que sur l'adresse source et le LUID du réseau habituel choisi avant le démarrage du tunnel. Les sockets revérifient l'identité de l'interface. Il utilise explicitement les DNS IPv4 de cette interface, sans modifier le DNS global. Le relais VPN conserve uniquement sa sortie VPN et reçoit un permis supplémentaire vers le port local précis du relais public. Aucun permis Internet direct n'est donné à Electron. Un changement de réseau, une perte du VPN ou l'arrêt d'un relais arrête la session ; les transferts protégés ne reprennent pas sur le réseau habituel.
+
+Cette évolution remplace la garantie initiale « tout le trafic web dans le VPN » à la demande explicite de l'utilisateur. Les autres applications conservent leurs routes et DNS. Les flux du relais public sont marqués `PUBLIC_FLOW` (`DNS_PUBLIC`, `WEB_PUBLIC`) ; les flux protégés restent marqués `VPN_FLOW`.
+
+`npm run test:public` réalise deux HEAD publics sans compte (PARTAGE et API YouTube), via la véritable image publique confinée WFP, avec DNS lié à l'interface habituelle et TLS vérifié. Ce test nécessite une connexion Internet et UAC, mais ne démarre pas OpenVPN, ne soumet aucun formulaire et ne suit pas les redirections. Le précontrôle `npm run browser:test` reste sans réseau distant : il teste aussi l'authentification et les refus CAS/IdP/Nextcloud du véritable relais public.
+
+Les quotas sont séparés : 32 connexions VPN et 32 connexions publiques, afin qu'une saturation publique ne consomme pas la réserve VPN. Le relais principal accepte au plus 80 connexions en incluant les en-têtes non encore authentifiés ; le relais public accepte au plus 32 connexions. Cela corrige la saturation de l'ancien plafond partagé de 16 constatée pendant la recette.
+
+Validation du routage : 34 tests natifs, coffre DPAPI et 40 tests Node réussis ; précontrôle WFP/CAS/navigateur réussi, dont les refus du relais public et un retour POST fictif IdP → RENATER → PARTAGE. Le test public réel réussit : PARTAGE `302`, API YouTube `200`, TLS vérifié, flux DNS et TCP issus de l'adresse du réseau habituel, routes et DNS globaux inchangés. La reproduction dans MyNEIGE montre PARTAGE/RENATER, CDN et serveurs vidéo `googlevideo.com` sur la sortie habituelle, et APPIGS/CAS/IdP sur le VPN.
+
+L'utilisateur confirme la lecture YouTube et l'accès à la messagerie après une seconde ouverture. Un écran blanc reste observé au premier retour d'authentification via l'IdP ; les traces montrent des réponses IdP `200` puis un chargement PARTAGE annulé (`ERR_ABORTED`). La cause exacte de cette première navigation n'est pas établie. La saturation n'est pas relevée à cet instant et ne doit pas être présentée comme son explication. Aucun rejeu automatique de formulaire SAML ni déplacement de l'IdP sur le réseau habituel n'a été ajouté. Le scénario SAML local réussi ne constitue pas une validation du parcours réel de l'établissement.
 
 ## Validation et limites
 
@@ -33,3 +59,35 @@ Le précontrôle WFP du 24 octobre 2026 réussit également : sondes IPv4/IPv6 e
 Les politiques CSP et `Permissions-Policy` des sites, les vidéos privées ou interdites à l'intégration, une restriction YouTube liée au VPN et les erreurs d'une version H5P demeurent applicables. MyNEIGE conserve le Referer envoyé par le navigateur ; il ne le falsifie pas si une page le supprime. YouTube exige une identification du client via ce Referer : une intégration qui le supprime peut afficher l'erreur 153. Les domaines nécessaires aux fournisseurs peuvent évoluer ; étendre la liste doit rester ciblé et testé.
 
 Références : [lecteurs YouTube](https://developers.google.com/youtube/player_parameters), [identification du lecteur et Referer](https://developers.google.com/youtube/terms/required-minimum-functionality#youtube-embedded-player-and-video-playback), [domaines H5P.com](https://help.h5p.com/hc/en-us/articles/14980108131997-Domains-used-by-h5p-com), [bibliothèque vidéo H5P](https://github.com/h5p/h5p-video), [PARTAGE RENATER](https://www.renater.fr/services/collaborer-simplement/partage/).
+
+## Investigation des écrans vides — 25 octobre 2026
+
+Historique antérieur à la mise en place du routage public explicite ci-dessus.
+
+La recette réelle en développement signale encore un écran blanc pour Mail et noir pour YouTube/H5P. Les traces historiques montrent des domaines admis, suivis d'échecs génériques du relais ; les tests synthétiques précédents ne permettaient pas de détecter ces échecs réseau distants. L'autorisation des domaines ne prouve donc pas leur accessibilité depuis le tunnel.
+
+Les diagnostics distinguent désormais :
+
+- `BROWSER_REQUEST_BLOCKED` : refus du filtre Electron, avec domaine et type de ressource seulement.
+- `BROWSER_REQUEST_ERROR` : code Chromium des pages et sous-ressources ; le préfixe `net::` est normalisé pour éviter de masquer ces erreurs sous `OTHER`.
+- `DNS_ATTEMPT_FAILED` : domaine, étape UDP/TCP, code DNS numérique et catégorie contrôlée (`RCODE`, `NO_IPV4`, `INVALID_RESPONSE`, `TRANSPORT`). Ces lignes étaient auparavant perdues par le contrôleur pendant la navigation.
+- `RELAY_REQUEST_FAILED` : domaine et étape d'échec du relais (`DNS`, `CONNECT`, `TUNNEL`, etc.), sans texte d'exception distant.
+- `RELAY_CAPACITY` : plafond de connexions simultanées atteint.
+
+Les refus et erreurs Chromium sont dédupliqués et bornés à 64 entrées de chaque catégorie par session. Aucun chemin, paramètre de requête, cookie, en-tête d'authentification ou contenu de page n'est enregistré. Les traces IPC sont revérifiées par le contrôleur natif avant publication. Les règles d'accès et le confinement réseau restent identiques.
+
+Après fermeture d'une session lancée avec `npm start`, le journal est copié dans `.local/browser/live-session.txt`. Pendant la session, le journal protégé courant est sous `%ProgramData%/MyNEIGE-Logs/`.
+
+La reproduction authentifiée du 25 octobre permet d'établir :
+
+| Observation réelle | Portée du diagnostic |
+| --- | --- |
+| Mail : `ERR_TUNNEL_CONNECTION_FAILED`, puis `RELAY_REQUEST_FAILED host=partage.univ-avignon.fr stage=CONNECT` | Domaine admis et résolution terminée ; échec de la connexion TCP dans le relais, avant la réponse HTTP et la fédération RENATER. Le code Winsock relevé vaut zéro : il ne permet pas de préciser la cause système. |
+| YouTube : domaine admis, puis `ERR_TIMED_OUT` pour une ressource `script` | Le chargement du script externe expire ; aucune connexion web réussie vers YouTube n'est observée dans cette reproduction. Ce n'est pas un refus explicite du filtre Electron. |
+| `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` : scripts refusés | Les dépendances de la page universitaire ne sont pas toutes admises. En particulier, la règle cdnjs précédente ne couvre que les iframes H5P distantes, pas les bibliothèques appelées directement par la page universitaire. Leur rôle exact dans l'activité privée n'a pas été inspecté. |
+
+Des témoins HEAD publics, sans cookies ni compte, réussissent sur le réseau habituel **hors session protégée** : Mail `302` avec TLS vérifié, API YouTube `200` avec TLS vérifié, également en IPv4. Cette comparaison ne prouve pas leur accessibilité via le VPN. Les pages universitaires APPIGS/CAS/Moodle fonctionnent dans la même session protégée.
+
+Le blocage principal se situe donc dans le transport VPN/relais des destinations externes, avant leur rendu ; une restriction de sortie Internet du VPN est une hypothèse, pas une cause prouvée. La prochaine investigation réseau doit distinguer un défaut du relais/routage d'un filtrage en amont du tunnel (tentatives TCP ciblées et métadonnées SYN/réponse, toujours sans repli physique). La correction des dépendances CDN devra être ciblée sur le contexte universitaire et ne résoudra pas à elle seule ce problème de transport. Aucun élargissement supplémentaire de domaines ni exception réseau directe n'a été appliqué pendant cette investigation.
+
+Validation de l'instrumentation : 39 tests Node, 30 tests natifs, coffre DPAPI et précontrôle navigateur WFP réussis ; les fixtures du navigateur et du CAS passent également. Aucune distribution n'a été reconstruite.

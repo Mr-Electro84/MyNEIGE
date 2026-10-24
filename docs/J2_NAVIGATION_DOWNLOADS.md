@@ -22,7 +22,7 @@ Chaque fenêtre universitaire dispose d’un menu natif Windows :
 
 Précédent/suivant sont désactivés lorsqu’aucune entrée correspondante n’est disponible ou admise. Les contrôles de domaines et le proxy restent ceux de la session ; aucun navigateur externe n’est ouvert. L’accueil conserve les cookies de la session. Le préremplissage CAS reste à usage unique : revenir à une page de connexion ne redélivre pas les identifiants.
 
-Le menu Université conserve la fenêtre initialement ouverte sur APPIGS, son historique et sa session ; depuis un pop-up, il cible aussi cette fenêtre principale, sans remplacer le contenu du pop-up. Ses commandes sont désactivées si le VPN n’est pas prêt ou si la fenêtre principale est fermée, et leur exécution revérifie ces conditions. Les mentions « VPN » sont informatives : toutes les requêtes MyNEIGE, même vers les services accessibles publiquement, restent acheminées dans le tunnel. L'ajout Mail/Nextcloud et les exceptions YouTube/H5P sont décrits dans [les autorisations de contenus intégrés](EMBEDDED_CONTENT.md). Une session conservée ne garantit pas une authentification automatique sur chaque service ; les redirections CAS et l’accès réel restent à qualifier.
+Le menu Université conserve la fenêtre initialement ouverte sur APPIGS, son historique et sa session ; depuis un pop-up, il cible aussi cette fenêtre principale, sans remplacer le contenu du pop-up. Ses commandes sont désactivées si le VPN n’est pas prêt ou si la fenêtre principale est fermée, et leur exécution revérifie ces conditions. Les services universitaires restent sous tunnel, à l'exception explicite de Mail/PARTAGE ; RENATER et les ressources externes YouTube/H5P autorisées utilisent la connexion habituelle. Le routage et ses limites sont décrits dans [les autorisations de contenus intégrés](EMBEDDED_CONTENT.md). Une session conservée ne garantit pas une authentification automatique sur chaque service ; les redirections CAS et l’accès réel restent à qualifier.
 
 ## Icône Electron
 
@@ -38,7 +38,7 @@ L’icône de la barre de titre a été vérifiée visuellement sur une page fic
 
 ## Téléchargements
 
-Les téléchargements passent par le moteur Chromium de la session universitaire, avec son contexte d’authentification, son proxy et WFP. Aucun transfert n’est délégué à Node, curl ou une autre application. Une boîte « Enregistrer le fichier » propose un nom normalisé et laisse l’utilisateur choisir la destination, avec confirmation d’écrasement.
+Les téléchargements passent par le moteur Chromium de la session universitaire, avec son contexte d’authentification, son proxy et WFP. Les pièces jointes Mail/PARTAGE suivent la sortie publique autorisée ; les autres documents universitaires restent sous VPN. Aucun transfert n’est délégué à Node, curl ou une autre application. Une boîte « Enregistrer le fichier » propose un nom normalisé et laisse l’utilisateur choisir la destination, avec confirmation d’écrasement.
 
 - HTTPS uniquement vers les domaines universitaires et RENATER admis ; toute la chaîne de redirections est contrôlée. Les exceptions vidéo ne donnent pas accès au téléchargement des flux externes.
 - Les fichiers `blob:` générés par la page sont acceptés seulement si leur origine correspond à la page universitaire initiatrice.

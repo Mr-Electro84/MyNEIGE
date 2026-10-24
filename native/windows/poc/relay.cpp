@@ -54,12 +54,12 @@ static void tunnel(SOCKET client, SOCKET remote) {
     }
     std::osyncstream(std::cout) << "FLOW " << up << " " << down << std::endl;
 }
-int relayWorker() {
+int relayWorker(bool publicMode) {
     requirePrivilegedParent();
     require(!isAdministrator(), "Relay must run without administrator rights");
     require(GetFileType(GetStdHandle(STD_INPUT_HANDLE)) == FILE_TYPE_PIPE,
             "Relay requires its inherited anonymous configuration pipe");
-    require(configLine() == "MYNEIGE_RELAY_V3", "Unknown relay configuration");
+    require(configLine() == (publicMode ? "MYNEIGE_PUBLIC_V1" : "MYNEIGE_RELAY_V4"), "Unknown relay configuration");
     Adapter vpn;
     vpn.address = ipv4(configLine());
     vpn.index = static_cast<uint32_t>(std::stoul(configLine()));
@@ -71,7 +71,12 @@ int relayWorker() {
         dns.push_back(ipv4(server));
     std::string host = lower(configLine()), token = configLine();
     const auto scope = configLine();
-    require(scope == "appigs" || scope == "university", "Invalid relay destination scope");
+    const auto publicPortValue = std::stoul(configLine());
+    require(publicPortValue <= 65535, "Invalid public relay port");
+    const auto publicPort = static_cast<uint16_t>(publicPortValue);
+    require(publicMode ? scope == "public" && publicPort == 0 && publicServiceHost(host) :
+                (scope == "appigs" && publicPort == 0) || (scope == "university" && publicPort != 0),
+            "Invalid relay destination scope");
     require(validHost(host) && token.size() == 64, "Invalid relay session");
     for (char c : token)
         require(isxdigit(static_cast<unsigned char>(c)) != 0, "Invalid session token");
@@ -81,26 +86,33 @@ int relayWorker() {
     require(current.luid == vpn.luid && current.index == vpn.index && current.guid == vpn.guid &&
                 current.name == vpn.name,
             "VPN interface changed before relay start");
-    auto addresses = resolveVpn(vpn, dns, host);
-    auto tcpAddresses = resolveVpnTcp(vpn, dns, host);
-    require(!tcpAddresses.empty(), "No usable DNS TCP response");
-    std::cout << "DNS_UDP_TCP_VALIDATED" << std::endl;
+    std::vector<uint32_t> addresses;
+    if (!publicMode) {
+        addresses = resolveVpn(vpn, dns, host);
+        auto tcpAddresses = resolveVpnTcp(vpn, dns, host);
+        require(!tcpAddresses.empty(), "No usable DNS TCP response");
+        std::cout << "DNS_UDP_TCP_VALIDATED" << std::endl;
+    }
     for (auto ip : addresses)
         require(!forbiddenDestination(ip, vpn), "Target resolved to a forbidden local address");
     uint16_t port = 0;
     auto listener = loopbackListener(port);
-    std::cout << "READY " << port << " ";
+    std::cout << (publicMode ? "PUBLIC_READY " : "READY ") << port;
+    if (!publicMode) std::cout << " ";
     for (size_t i = 0; i < addresses.size(); ++i)
         std::cout << (i ? "," : "") << ipText(addresses[i]);
     std::cout << std::endl;
     // Browser resources require concurrent CONNECTs; concurrency remains explicitly bounded.
     static std::atomic<unsigned> active{0};
+    static RelaySlots slots;
     for (;;) {
         Socket client(accept(listener.s, nullptr, nullptr));
         require(client.s != INVALID_SOCKET, "Proxy accept failed");
         socketTimeout(client.s, 3000);
-        if (active.fetch_add(1) >= 16) {
+        const unsigned entryLimit = publicMode ? RelaySlots::limit : 80;
+        if (active.fetch_add(1) >= entryLimit) {
             --active;
+            std::osyncstream(std::cout) << "RELAY_CAPACITY limit=" << entryLimit << std::endl;
             try {
                 sendText(client.s,
                          "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
@@ -108,15 +120,21 @@ int relayWorker() {
             }
             continue;
         }
-        std::thread([client = std::move(client), vpn, dns, host, expected, scope]() mutable {
+        std::thread([client = std::move(client), vpn, dns, host, expected, scope, publicMode, publicPort]() mutable {
             struct Count {
+                bool reserved = false, publicRoute = false;
                 ~Count() {
+                    if (reserved) slots.release(publicRoute);
                     --active;
                 }
             } count;
             bool established = false;
+            std::string requestHost = "unknown";
+            const char *stage = "HEADER";
             try {
                 auto request = parseConnect(readHeader(client.s));
+                requestHost = request.host;
+                stage = "AUTH";
                 if (!constantEqual(request.authorization, expected)) {
                     wipe(request.authorization);
                     sendText(client.s, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic "
@@ -124,19 +142,49 @@ int relayWorker() {
                     return;
                 }
                 wipe(request.authorization);
-                if (request.host != host && !(scope == "university" && browserHost(request.host))) {
+                stage = "POLICY";
+                if (publicMode ? !publicServiceHost(request.host) :
+                    request.host != host && !(scope == "university" && browserHost(request.host))) {
                     sendText(client.s, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                     return;
                 }
+                count.publicRoute = scope == "university" && publicServiceHost(request.host);
+                if (!publicMode) {
+                    count.reserved = slots.acquire(count.publicRoute);
+                    if (!count.reserved) {
+                        std::osyncstream(std::cout) << "RELAY_CAPACITY limit=32" << std::endl;
+                        sendText(client.s, "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                        return;
+                    }
+                }
+                if (!publicMode && scope == "university" && publicServiceHost(request.host)) {
+                    // Le relais VPN ne résout jamais ces noms. Le second relais
+                    // revérifie la liste publique avant toute résolution locale.
+                    stage = "CONNECT";
+                    Socket upstream(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+                    require(upstream.s != INVALID_SOCKET, "Cannot create public proxy connection");
+                    connectWithin(upstream.s, endpoint(0x7f000001, publicPort), 3000);
+                    auto header = publicConnectHeader(request.host, expected);
+                    sendText(upstream.s, header); wipe(header);
+                    established = true; stage = "TUNNEL";
+                    // La réponse CONNECT du second relais est transmise telle
+                    // quelle ; TLS, cookies et corps POST restent de bout en bout.
+                    tunnel(client.s, upstream.s);
+                    return;
+                }
                 // No resolver cache: every new CONNECT is resolved through the VPN.
-                auto resolved = resolveVpn(vpn, dns, request.host);
+                stage = "DNS";
+                auto resolved = resolveVpn(vpn, dns, request.host, publicMode);
                 Socket remote;
                 for (auto address : resolved) {
+                    stage = "ADDRESS";
                     require(!forbiddenDestination(address, vpn), "Forbidden target address");
+                    require(!publicMode || publicDestination(address), "Non-public destination refused by public relay");
                     try {
+                        stage = "CONNECT";
                         auto candidate = vpnSocket(vpn, SOCK_STREAM, IPPROTO_TCP);
                         connectWithin(candidate.s, endpoint(address, 443));
-                        reportFlow("WEB", "TCP", candidate.s, address, 443);
+                        reportFlow(publicMode ? "WEB_PUBLIC" : "WEB", "TCP", candidate.s, address, 443);
                         remote = std::move(candidate);
                         break;
                     } catch (const std::exception &) { /* Next A record, still bound to the same tunnel. */
@@ -145,8 +193,10 @@ int relayWorker() {
                 require(remote.s != INVALID_SOCKET, "Target unreachable through VPN");
                 sendText(client.s, "HTTP/1.1 200 Connection Established\r\n\r\n");
                 established = true;
+                stage = "TUNNEL";
                 tunnel(client.s, remote.s);
             } catch (const std::exception &) {
+                const int code = WSAGetLastError();
                 if (!established) {
                     try {
                         sendText(client.s,
@@ -155,6 +205,9 @@ int relayWorker() {
                     }
                 }
                 std::osyncstream(std::cout) << "REQUEST_FAILED" << std::endl;
+                // Aucun texte d'exception, en-tête HTTP, chemin ou secret.
+                std::osyncstream(std::cout) << "RELAY_REQUEST_FAILED host=" << requestHost << " stage=" << stage
+                    << " wsa=" << (std::string(stage) == "CONNECT" || std::string(stage) == "TUNNEL" ? code : 0) << std::endl;
             }
         }).detach();
     }

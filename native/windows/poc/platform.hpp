@@ -14,7 +14,10 @@ std::vector<Adapter> adapters();
 Adapter adapterFor(uint32_t address);
 Adapter idleAdapterByName(const std::wstring &name);
 Socket vpnSocket(const Adapter &adapter, int type, int protocol);
-std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint32_t> &dns, const std::string &host);
+Adapter publicNetwork();
+Socket boundNetworkSocket(const Adapter &adapter, int type, int protocol);
+std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint32_t> &dns, const std::string &host,
+                               bool publicNetwork = false);
 std::vector<uint32_t> resolveVpnTcp(const Adapter &adapter, const std::vector<uint32_t> &dns, const std::string &host);
 void reportFlow(const char *role, const char *protocol, SOCKET socket, uint32_t destination, uint16_t port);
 struct NetworkSnapshot {
@@ -51,7 +54,7 @@ struct Job {
                 bool restricted = false);
 };
 struct Staging {
-    std::filesystem::path directory, executable, profile;
+    std::filesystem::path directory, executable, profile, publicExecutable;
     Staging();
     ~Staging();
     void allowUserRead();
@@ -64,12 +67,21 @@ struct Firewall {
     ~Firewall();
     void install(const std::wstring &executable, const Adapter *vpn);
     void allowVpn(const std::wstring &executable, const Adapter &vpn);
+    void allowPublicRelay(const std::wstring &executable, const Adapter &network);
     void quarantineBrowser(const std::wstring &executable);
     void allowBrowserProxy(const std::wstring &executable, uint16_t port);
     void revokeBrowserProxy(const std::wstring &executable);
     void clear();
     static void recover();
 };
+std::string relayConfiguration(const Adapter &network, const std::vector<uint32_t> &dns, const std::string &host,
+                               const std::string &token, const std::string &scope, uint16_t publicPort = 0);
+struct PublicRelay {
+    Child child;
+    uint16_t port = 0;
+    void start(Job &job, Firewall &firewall, Staging &staging, const Adapter &network, const std::string &token);
+};
+void publicRelayChecks(Job &job, Firewall &firewall, Staging &staging);
 void validateOpenVpn(const std::filesystem::path &executable);
 DWORD tcpOwner(const sockaddr_in &local, const sockaddr_in &remote);
 void reportTransport(DWORD pid);

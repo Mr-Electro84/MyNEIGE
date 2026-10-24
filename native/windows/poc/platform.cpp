@@ -88,7 +88,7 @@ Adapter idleAdapterByName(const std::wstring &name) {
         }
     throw std::runtime_error("Dedicated TAP adapter is not yet enumerated");
 }
-Socket vpnSocket(const Adapter &adapter, int type, int protocol) {
+Socket boundNetworkSocket(const Adapter &adapter, int type, int protocol) {
     auto current = adapterFor(adapter.address);
     require(current.index == adapter.index && current.luid == adapter.luid, "Tunnel interface generation changed");
     require(current.name == adapter.name && current.guid == adapter.guid, "Tunnel adapter name or GUID changed");
@@ -105,8 +105,23 @@ Socket vpnSocket(const Adapter &adapter, int type, int protocol) {
     socketTimeout(result.s, 5000);
     return result;
 }
+Socket vpnSocket(const Adapter &adapter, int type, int protocol) {
+    return boundNetworkSocket(adapter, type, protocol);
+}
+Adapter publicNetwork() {
+    // Lecture de la route habituelle avant l'installation du tunnel MyNEIGE.
+    // Cette destination sert uniquement au calcul de route : aucun paquet envoyé.
+    const auto index = defaultInterfaceFor(0x01010101);
+    std::vector<Adapter> choices;
+    for (const auto &adapter : adapters())
+        if (adapter.index == index && adapter.preferred && !adapter.dns.empty())
+            choices.push_back(adapter);
+    require(!choices.empty(), "No usual IPv4 network with DNS available for public services");
+    require(choices.front().dns.size() <= 4, "Too many public-network DNS servers");
+    return choices.front();
+}
 std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint32_t> &servers,
-                                 const std::string &host) {
+                                 const std::string &host, bool publicNetwork) {
     require(!servers.empty() && servers.size() <= 4, "A reliable VPN DNS server is required");
     for (auto server : servers) {
         const char *stage = "BIND";
@@ -121,7 +136,7 @@ std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint3
             require(connect(socket.s, reinterpret_cast<sockaddr *>(&destination), sizeof(destination)) == 0,
                     "DNS UDP connect failed");
             stage = "UDP_SEND";
-            reportFlow("DNS", "UDP", socket.s, server, 53);
+            reportFlow(publicNetwork ? "DNS_PUBLIC" : "DNS", "UDP", socket.s, server, 53);
             sendAll(socket.s, query.data(), query.size());
             Bytes packet(65535);
             stage = "UDP_RECEIVE";
@@ -137,7 +152,7 @@ std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint3
             stage = "TCP_BIND_CONNECT";
             auto tcp = vpnSocket(adapter, SOCK_STREAM, IPPROTO_TCP);
             connectWithin(tcp.s, destination, 5000);
-            reportFlow("DNS", "TCP", tcp.s, server, 53);
+            reportFlow(publicNetwork ? "DNS_PUBLIC" : "DNS", "TCP", tcp.s, server, 53);
             unsigned char size[2]{static_cast<unsigned char>(query.size() >> 8),
                                   static_cast<unsigned char>(query.size() & 255)};
             stage = "TCP_SEND";
@@ -157,8 +172,11 @@ std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint3
         } catch (const std::exception &error) {
             // Generated metadata only; no DNS names, records, management lines or secrets.
             const int code = WSAGetLastError();
-            std::cout << "DNS_ATTEMPT_FAILED stage=" << stage << " wsa=" << code << " rcode=" << responseCode
-                      << std::endl;
+            const bool parsing = std::string(stage) == "UDP_PARSE" || std::string(stage) == "TCP_PARSE";
+            const char *reason = !parsing ? "TRANSPORT" : responseCode ? "RCODE" :
+                std::string(error.what()) == "No usable IPv4 DNS answer" ? "NO_IPV4" : "INVALID_RESPONSE";
+            std::osyncstream(std::cout) << "DNS_ATTEMPT_FAILED host=" << host << " stage=" << stage
+                << " wsa=" << (parsing ? 0 : code) << " rcode=" << responseCode << " reason=" << reason << std::endl;
             // These failures contain only constants and numeric OS error codes from our own code.
             // This scope never consumes management messages or remote text.
             if (std::string(stage) == "BIND")
@@ -172,7 +190,8 @@ void reportFlow(const char *role, const char *protocol, SOCKET socket, uint32_t 
     sockaddr_in local{};
     int length = sizeof(local);
     require(getsockname(socket, reinterpret_cast<sockaddr *>(&local), &length) == 0, "Cannot inspect flow source");
-    std::osyncstream(std::cout) << "VPN_FLOW role=" << role << " protocol=" << protocol
+    const bool publicFlow = std::string(role) == "DNS_PUBLIC" || std::string(role) == "WEB_PUBLIC";
+    std::osyncstream(std::cout) << (publicFlow ? "PUBLIC_FLOW role=" : "VPN_FLOW role=") << role << " protocol=" << protocol
                                 << " source=" << ipText(ntohl(local.sin_addr.S_un.S_addr)) << ":"
                                 << ntohs(local.sin_port) << " destination=" << ipText(destination) << ":" << port
                                 << std::endl;
@@ -536,6 +555,7 @@ Staging::Staging() {
     directory = root / wide("session-" + randomHex(16));
     createProtectedDirectory(directory);
     executable = directory / L"relay.exe";
+    publicExecutable = directory / L"public-relay.exe";
     profile = directory / L"client.ovpn";
     require(CopyFileW(imagePath().c_str(), executable.c_str(), TRUE) != 0, "Cannot stage isolated relay image");
     PSECURITY_DESCRIPTOR descriptor = nullptr;
@@ -560,6 +580,7 @@ Staging::~Staging() {
         DeleteFileW(executable.c_str());
         DeleteFileW(profile.c_str());
         DeleteFileW((directory / L"myneige-vault.exe").c_str());
+        DeleteFileW(publicExecutable.c_str());
         RemoveDirectoryW(directory.c_str());
     }
 }
@@ -638,6 +659,7 @@ void recoverStaging() {
         DeleteFileW((entry.path() / L"relay.exe").c_str());
         DeleteFileW((entry.path() / L"client.ovpn").c_str());
         DeleteFileW((entry.path() / L"myneige-vault.exe").c_str());
+        DeleteFileW((entry.path() / L"public-relay.exe").c_str());
         removeProtectedTree(entry.path() / L"browser", entry.path());
         RemoveDirectoryW(entry.path().c_str());
     }
@@ -753,6 +775,24 @@ void Firewall::allowVpn(const std::wstring &executable, const Adapter &vpn) {
         throw;
     }
     FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+}
+void Firewall::allowPublicRelay(const std::wstring &executable, const Adapter &network) {
+    require(owns && network.address, "Public relay requires an active protected session");
+    FWP_BYTE_BLOB *app = nullptr;
+    wincheck(FwpmGetAppIdFromFileName0(executable.c_str(), &app), "Read public relay app ID");
+    try {
+        addFilter(engine, FWPM_LAYER_ALE_AUTH_CONNECT_V4, FWP_ACTION_BLOCK, 1,
+                  {appCondition(app)}, L"Public relay IPv4 quarantine");
+        addFilter(engine, FWPM_LAYER_ALE_AUTH_CONNECT_V6, FWP_ACTION_BLOCK, 1,
+                  {appCondition(app)}, L"Public relay IPv6 quarantine");
+    } catch (...) {
+        FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+        throw;
+    }
+    FwpmFreeMemory0(reinterpret_cast<void **>(&app));
+    // Même contrainte application + adresse + LUID que le relais VPN ; cette
+    // image distincte ne reçoit aucun permis sur l'interface VPN.
+    allowVpn(executable, network);
 }
 void Firewall::quarantineBrowser(const std::wstring &executable) {
     require(owns, "Session firewall must precede browser startup");

@@ -62,6 +62,10 @@ function embeddedRequestAllowed(details) {
     const url = webURL(details.url);
     if (!url) return false;
     const host = url.hostname;
+    // Bibliothèques des activités, parfois chargées par la page universitaire
+    // avant la création de l'iframe H5P. La sortie réseau est publique et ciblée.
+    if (['script', 'stylesheet'].includes(details.resourceType) &&
+        ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net'].includes(host)) return true;
     // H5P charge l'API YouTube depuis la page du cours, avant de créer l'iframe.
     if (details.resourceType === 'script' && youtubePlayers.has(host) &&
         (['/iframe_api', '/player_api'].includes(url.pathname) || url.pathname.startsWith('/s/player/'))) return true;

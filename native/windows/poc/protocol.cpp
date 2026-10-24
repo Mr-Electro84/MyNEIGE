@@ -12,19 +12,43 @@ bool universityHost(const std::string &host) {
            (host == "univ-avignon.fr" ||
             (host.size() > suffix.size() && host.compare(host.size() - suffix.size(), suffix.size(), suffix) == 0));
 }
-bool browserHost(const std::string &host) {
+bool publicServiceHost(const std::string &host) {
     if (!validHost(host))
         return false;
     // Le relais voit seulement CONNECT : Electron impose en complément le
     // contexte iframe universitaire et les chemins des lecteurs externes.
-    for (const auto &domain : {"univ-avignon.fr", "renater.fr", "youtube.com", "youtube-nocookie.com",
+    if (host == "partage.univ-avignon.fr")
+        return true;
+    for (const auto &domain : {"renater.fr", "youtube.com", "youtube-nocookie.com",
                                "googlevideo.com", "ytimg.com", "h5p.com", "h5p.org", "h5p.io"})
         if (domainHost(host, domain))
             return true;
     static const std::set<std::string> resources{"youtubei.googleapis.com", "youtube.googleapis.com",
         "jnn-pa.googleapis.com", "yt3.ggpht.com", "www.gstatic.com", "fonts.gstatic.com",
-        "fonts.googleapis.com", "cdnjs.cloudflare.com", "www.google.com"};
+        "fonts.googleapis.com", "cdnjs.cloudflare.com", "cdn.jsdelivr.net", "www.google.com"};
     return resources.contains(host);
+}
+bool browserHost(const std::string &host) {
+    return universityHost(host) || publicServiceHost(host);
+}
+bool publicDestination(uint32_t ip) {
+    // La sortie publique ne donne pas accès au réseau local, au tunnel, aux
+    // plages privées, de documentation, de test ou réservées.
+    const auto first = ip >> 24;
+    return first != 0 && first != 10 && first != 127 && first < 224 &&
+        (ip & 0xffc00000) != 0x64400000 && (ip & 0xffff0000) != 0xa9fe0000 &&
+        (ip & 0xfff00000) != 0xac100000 && (ip & 0xffffff00) != 0xc0000000 &&
+        (ip & 0xffffff00) != 0xc0000200 && (ip & 0xffff0000) != 0xc0a80000 &&
+        (ip & 0xfffe0000) != 0xc6120000 && (ip & 0xffffff00) != 0xc6336400 &&
+        (ip & 0xffffff00) != 0xcb007100;
+}
+std::string publicConnectHeader(const std::string &host, const std::string &authorization) {
+    require(publicServiceHost(host), "Protected host cannot enter the public relay");
+    require(authorization.rfind("Basic ", 0) == 0 && authorization.size() <= 256 &&
+                authorization.find_first_of("\r\n") == std::string::npos,
+            "Invalid internal proxy authentication");
+    return "CONNECT " + host + ":443 HTTP/1.1\r\nHost: " + host +
+           ":443\r\nProxy-Authorization: " + authorization + "\r\n\r\n";
 }
 std::string managementFrame(const std::string &value) {
     require(!value.empty() && value.size() < 8192 && value.find_first_of("\r\n") == std::string::npos &&

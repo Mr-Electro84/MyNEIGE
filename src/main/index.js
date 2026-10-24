@@ -15,6 +15,7 @@ const { protectRequests } = require('./session-policy');
 const { NativeVault } = require('./native-vault');
 const { APP_ICON } = require('./app-icon');
 const { helpMenu } = require('./about');
+const { networkErrors, networkError, requestMetadata } = require('./network-diagnostics');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
@@ -34,12 +35,6 @@ Menu.setApplicationMenu(null);
 let form, webSession, remote, proxyPort, proxySecret, authPending = false, stopping = false, testMode = false;
 const formPath = path.join(__dirname, '../renderer/index.html');
 const formURL = pathToFileURL(formPath).href;
-const networkErrors = new Set(['ERR_FAILED', 'ERR_ABORTED', 'ERR_BLOCKED_BY_CLIENT', 'ERR_ACCESS_DENIED',
-  'ERR_NETWORK_ACCESS_DENIED', 'ERR_PROXY_CONNECTION_FAILED', 'ERR_TUNNEL_CONNECTION_FAILED',
-  'ERR_PROXY_AUTH_REQUESTED', 'ERR_PROXY_AUTH_UNSUPPORTED', 'ERR_NO_SUPPORTED_PROXIES',
-  'ERR_INVALID_AUTH_CREDENTIALS', 'ERR_CONNECTION_CLOSED', 'ERR_CONNECTION_RESET', 'ERR_CONNECTION_REFUSED',
-  'ERR_CONNECTION_TIMED_OUT', 'ERR_TIMED_OUT', 'ERR_NAME_NOT_RESOLVED', 'ERR_CERT_AUTHORITY_INVALID',
-  'ERR_CERT_COMMON_NAME_INVALID', 'ERR_CERT_DATE_INVALID', 'ERR_SSL_PROTOCOL_ERROR']);
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
 let vpnReady = false, downloads;
@@ -273,12 +268,18 @@ async function openProtectedSession() {
   webSession.setPermissionCheckHandler(() => false);
   downloads = createDownloads({ session: webSession, ready: () => vpnReady && !stopping,
     directory: app.getPath('downloads'), dialog, report: status => send(`UI_DOWNLOAD ${status}`) });
-  protectRequests(webSession, host => send(`UI_DOMAIN ${host}`));
+  protectRequests(webSession, host => send(`UI_DOMAIN ${host}`), metadata => send(`UI_REQUEST_BLOCKED ${metadata}`));
+  const requestErrors = new Set();
   webSession.webRequest.onCompleted(details => {
     if (details.resourceType === 'mainFrame' && allowedURL(details.url)) send(`UI_PAGE ${new URL(details.url).hostname} ${details.statusCode}`);
   });
   webSession.webRequest.onErrorOccurred(details => {
-    if (details.resourceType === 'mainFrame') send(`UI_NET_ERROR ${networkErrors.has(details.error) ? details.error : 'OTHER'}`);
+    const error = networkError(details.error), metadata = requestMetadata(details);
+    const key = metadata && `${metadata} ${error}`;
+    if (key && requestErrors.size < 64 && !requestErrors.has(key)) {
+      requestErrors.add(key); send(`UI_REQUEST_ERROR ${key}`);
+    }
+    if (details.resourceType === 'mainFrame') send(`UI_NET_ERROR ${error}`);
   });
   await webSession.setProxy({ mode: 'fixed_servers', proxyRules: `http=127.0.0.1:${proxyPort};https=127.0.0.1:${proxyPort}`, proxyBypassRules: '<-loopback>' });
   for (const url of [START_URL, 'https://cas.univ-avignon.fr/', 'https://127.0.0.1/']) {
@@ -287,7 +288,7 @@ async function openProtectedSession() {
   await webSession.closeAllConnections();
   remote = protectedWindow();
   remote.webContents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
-    if (mainFrame) send(`UI_NET_ERROR ${networkErrors.has(description) ? description : 'OTHER'} code=${Number.isInteger(code) ? code : 0}`);
+    if (mainFrame) send(`UI_NET_ERROR ${networkError(description)} code=${Number.isInteger(code) ? code : 0}`);
   });
   await remote.loadURL(START_URL);
 }

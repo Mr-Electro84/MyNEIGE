@@ -27,6 +27,7 @@
     "poc:qualify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/qualify-j1.ps1",
     "poc:analyze": "node scripts/analyze-j1.js",
     "browser:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-wfp.ps1 -Elevate -TestCommand browser-test",
+    "test:public": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-wfp.ps1 -Elevate -TestCommand public-network-test",
     "poc:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-poc.ps1",
     "poc:inspect": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-poc.ps1 -Mode inspect",
     "poc:wfp-test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-wfp.ps1 -Elevate",

@@ -22,11 +22,12 @@ struct Options {
     bool browserMode = false;
     std::filesystem::path projectRoot = std::filesystem::current_path();
 };
-int relayWorker();
+int relayWorker(bool publicMode = false);
 int blockedProbe(uint16_t port, bool ipv6 = false, bool bound = false);
 int wfpTest();
 int adapterTest(const Options &options);
 int connectSession(const Options &options);
 int inspect(const Options &options);
+int publicNetworkTest();
 Handle sessionMutex();
 } // namespace neige

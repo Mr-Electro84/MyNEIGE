@@ -46,6 +46,16 @@ function embeddedFixture(request) {
     return html('<script src="https://static.partage.renater.fr/mail-fixture.js"></script>');
   if (url.hostname === 'static.partage.renater.fr') return new Response('document.title = "RENATER fixture";',
     { headers: { 'content-type': 'text/javascript' } });
+  if (url.pathname === '/mail-saml-fixture') {
+    if (url.hostname === 'partage.univ-avignon.fr') return new Response(null, { status: 302,
+      headers: { location: 'https://idp.univ-avignon.fr/mail-saml-fixture' } });
+    if (url.hostname === 'idp.univ-avignon.fr') return html('<form method="POST" action="https://sp.partage.renater.fr/mail-saml-fixture"><input name="SAMLResponse" value="local-fixture"></form><script>document.forms[0].submit();</script>');
+    if (url.hostname === 'sp.partage.renater.fr') return request.text().then(body => {
+      if (request.method !== 'POST' || body !== 'SAMLResponse=local-fixture') throw new Error('Retour SAML fictif altéré');
+      return new Response(null, { status: 302, headers: { location: 'https://partage.univ-avignon.fr/mail-saml-complete' } });
+    });
+  }
+  if (url.hostname === 'partage.univ-avignon.fr' && url.pathname === '/mail-saml-complete') return html('<title>SAML fixture completed</title>');
   return null;
 }
 async function runEmbeddedTests({ window, directory }) {
@@ -93,6 +103,15 @@ async function runEmbeddedTests({ window, directory }) {
   await window.loadURL('https://partage.univ-avignon.fr/mail-fixture');
   if (window.webContents.getURL() !== 'https://webmail.partage.renater.fr/mail-fixture' ||
       await window.webContents.executeJavaScript('document.title') !== 'RENATER fixture') throw new Error('Redirection/ressources RENATER bloquées'); ++checks;
+  await window.loadURL('https://partage.univ-avignon.fr/mail-saml-fixture').catch(error => {
+    if (error.code !== 'ERR_ABORTED') throw error; // Navigation remplacée par le retour POST automatique.
+  });
+  const deadline = Date.now() + 5000;
+  while (window.webContents.getURL() !== 'https://partage.univ-avignon.fr/mail-saml-complete' || window.webContents.isLoading()) {
+    if (Date.now() >= deadline) throw new Error('Retour IdP vers PARTAGE incomplet');
+    await pause(25);
+  }
+  if (await window.webContents.executeJavaScript('document.title') !== 'SAML fixture completed') throw new Error('Page finale SAML absente'); ++checks;
   return checks;
 }
 module.exports = { embeddedFixture, runEmbeddedTests };

@@ -1,10 +1,10 @@
 [CmdletBinding()]
 param([switch]$CheckOnly, [switch]$BrowserTest, [switch]$ForgetCredentials, [switch]$ResetUserData)
 $ErrorActionPreference = 'Stop'
+$startupClock = [Diagnostics.Stopwatch]::StartNew()
 $root = Split-Path -Parent $PSScriptRoot
 $data = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'MyNEIGE'
 $logDirectory = Join-Path $data 'logs'
-$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $diagnostic = ''
 function Show-MyneigeMessage([string]$Message, [string]$Icon = 'Warning') {
     Add-Type -AssemblyName System.Windows.Forms
@@ -19,6 +19,7 @@ try {
     $admin = ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if ($admin -and !$CheckOnly) { throw "Lancez MyNEIGE normalement, sans executer le lanceur en tant qu'administrateur. Seul le controleur demandera une elevation UAC." }
     $manifest = Test-DistributionPayload $root
+    Write-Output ('STARTUP_PAYLOAD elapsed_ms=' + $startupClock.ElapsedMilliseconds)
     $binary = Join-Path $root 'bin\myneige-controller.exe'
     if ($ForgetCredentials -or $ResetUserData) {
         if (Test-MyneigeSessionActive) { throw 'Fermez la session MyNEIGE avant de supprimer les donnees.' }
@@ -41,10 +42,15 @@ try {
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
     $diagnostic = Join-Path $logDirectory ('preparation-' + [Guid]::NewGuid().ToString('N') + '.txt')
     $resultFile = [IO.Path]::ChangeExtension($diagnostic, '.json')
-    $mode = if ($CheckOnly) { '-CheckOnly' } elseif ($BrowserTest) { '-Diagnose' } else { '-Ensure' }
+    $setupArguments = @{ ResultFile = $resultFile }
+    if ($CheckOnly) { $setupArguments.CheckOnly = $true }
+    elseif ($BrowserTest) { $setupArguments.Diagnose = $true }
+    else { $setupArguments.Ensure = $true }
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'openvpn-setup.ps1') $mode -ResultFile $resultFile *> $diagnostic
+    # A child script has its own scope; its exit code returns here. No second PowerShell is needed.
+    & (Join-Path $PSScriptRoot 'openvpn-setup.ps1') @setupArguments *> $diagnostic
     $setupCode = $LASTEXITCODE; $ErrorActionPreference = $previous
+    Write-Output ('STARTUP_PREREQUISITES elapsed_ms=' + $startupClock.ElapsedMilliseconds)
     if ($CheckOnly) {
         if (!(Test-Path -LiteralPath $resultFile)) { throw 'Resultat du controle OpenVPN manquant.' }
         $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
@@ -58,11 +64,11 @@ try {
         if ($setupCode -ne 0 -or $result.Status -ne 'Ready') { throw $result.Message }
     }
     $logName = 'session-' + [Guid]::NewGuid().ToString('N') + '.txt'
-    $arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',('"' + (Join-Path $PSScriptRoot 'run-distribution-worker.ps1') + '"'),'-LogName',$logName)
-    if ($BrowserTest) { $arguments += '-BrowserTest' }
-    else { $arguments += @('-OpenVpn',('"' + $result.Path + '"')) }
+    $command = if ($BrowserTest) { 'distribution-test' } else { 'distribution-browse' }
+    $arguments = @($command,'--project-root',('"' + $root + '"'),'--log-name',$logName)
+    if (!$BrowserTest) { $arguments += @('--profile',('"' + (Join-Path $root 'VPN_Universite_Avignon.ovpn') + '"'),'--openvpn',('"' + $result.Path + '"')) }
     try {
-        $worker = Start-Process -FilePath $powershell -ArgumentList $arguments -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $root
+        $worker = Start-Process -FilePath $binary -ArgumentList $arguments -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $root
     } catch {
         if ($_.Exception.NativeErrorCode -eq 1223) { exit 2 }
         throw

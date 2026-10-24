@@ -16,6 +16,20 @@ function Get-PayloadPath([string]$Root, [string]$Relative) {
     return $resolved
 }
 function Test-DistributionPayload([string]$Root) {
+    $checker = Join-Path (Split-Path -Parent $PSScriptRoot) 'bin\myneige-controller.exe'
+    if (!(Test-Path -LiteralPath $checker)) { $checker = Join-Path (Split-Path -Parent $PSScriptRoot) '.local\poc\myneige-poc.exe' }
+    if (Test-Path -LiteralPath $checker) {
+        $previous = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = & $checker payload-check --project-root $Root 2>&1
+            $code = $LASTEXITCODE
+        } finally { $ErrorActionPreference = $previous }
+        if ($code -ne 0 -or (@($output) -join "`n") -notmatch '^PAYLOAD_VALIDATED files=\d+$') {
+            throw ('Verification du paquet refusee : ' + (@($output | ForEach-Object { $_.ToString() }) -join "`n"))
+        }
+        return Get-Content -LiteralPath (Join-Path $Root 'distribution.json') -Raw | ConvertFrom-Json
+    }
     Assert-PlainTree $Root
     $manifest = Get-Content -LiteralPath (Join-Path $Root 'distribution.json') -Raw | ConvertFrom-Json
     if ($manifest.product -cne 'MyNEIGE' -or $manifest.schema -ne 1 -or $manifest.architecture -cne 'x64' -or !$manifest.files.Count) {

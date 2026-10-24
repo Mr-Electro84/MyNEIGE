@@ -1,5 +1,6 @@
 #include "browser.hpp"
 #include "session.hpp"
+#include "startup.hpp"
 namespace neige {
 static void copyReadOnlyTree(const std::filesystem::path &source, const std::filesystem::path &destination) {
     const DWORD attributes = GetFileAttributesW(source.c_str());
@@ -24,7 +25,7 @@ void BrowserPilot::prepare(const Staging &staging, const std::filesystem::path &
     const auto browser = staging.directory / L"browser";
     require(std::filesystem::create_directory(browser), "Cannot create protected browser staging");
     grantUserRead(browser);
-    copyReadOnlyTree(runtime, browser / L"runtime");
+    prepareRuntime(runtime, browser / L"runtime", staging.directory.parent_path());
     copyReadOnlyTree(root / L"src", browser / L"app");
     copyReadOnlyTree(root / L"assets", browser / L"assets");
     copyReadOnlyTree(root / L"package.json", browser / L"package.json");

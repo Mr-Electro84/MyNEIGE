@@ -62,6 +62,30 @@ try {
     $rejected = $false
     try { $null = Test-DistributionPayload $fixtureRoot } catch { $rejected = $_.Exception.Message -like '*invalide*' }
     Assert-Distribution $rejected 'Malformed checksum accepted.'
+    $fixtureFiles[0].sha256 = (Get-FileHash -LiteralPath (Get-PayloadPath $fixtureRoot $fixtureFiles[0].path)).Hash
+    $originalPath = $fixtureFiles[0].path
+    foreach ($path in @('../outside','/absolute','C:/Windows/win.ini','src/../../outside','src\main\index.js','src/./index.js','src/main/index.js.','src//main/index.js')) {
+        $fixtureFiles[0].path = $path
+        Save-Fixture
+        $rejected = $false
+        try { $null = Test-DistributionPayload $fixtureRoot } catch { $rejected = $true }
+        Assert-Distribution $rejected "Native integrity checker accepted an invalid path: $path"
+    }
+    $fixtureFiles[0].path = $originalPath
+    $fixtureManifest.files = @($fixtureFiles) + [pscustomobject]@{path=$originalPath.ToUpperInvariant();sha256=$fixtureFiles[0].sha256}
+    Save-Fixture
+    $rejected = $false
+    try { $null = Test-DistributionPayload $fixtureRoot } catch { $rejected = $true }
+    Assert-Distribution $rejected 'Case-insensitive duplicate manifest paths were accepted.'
+    $fixtureManifest.files = @($fixtureFiles | Where-Object { $_.path -ne 'src/main/index.js' })
+    Save-Fixture
+    $rejected = $false
+    try { $null = Test-DistributionPayload $fixtureRoot } catch { $rejected = $true }
+    Assert-Distribution $rejected 'A required file omitted from the manifest was accepted.'
+    [IO.File]::WriteAllText($fixtureManifestPath, '{"schema":')
+    $rejected = $false
+    try { $null = Test-DistributionPayload $fixtureRoot } catch { $rejected = $true }
+    Assert-Distribution $rejected 'Malformed JSON did not fail closed.'
 } finally {
     $intendedParent = [IO.Path]::GetFullPath((Join-Path $root '.local')) + '\'
     if (![IO.Path]::GetFullPath($fixtureRoot).StartsWith($intendedParent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe fixture cleanup.' }

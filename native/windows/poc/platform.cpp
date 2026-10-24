@@ -466,7 +466,7 @@ static std::filesystem::path protectedRoot() {
     CoTaskMemFree(folder);
     return root / L"MyNEIGE-PoC";
 }
-static void verifyProtectedDirectory(const std::filesystem::path &directory) {
+void verifyProtectedDirectory(const std::filesystem::path &directory, bool runtimeCacheCleanup) {
     Handle handle(CreateFileW(directory.c_str(), READ_CONTROL | FILE_READ_ATTRIBUTES,
                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                               FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
@@ -501,7 +501,10 @@ static void verifyProtectedDirectory(const std::filesystem::path &directory) {
         auto allowed = static_cast<ACCESS_ALLOWED_ACE *>(ace);
         require(allowed->Header.AceType == ACCESS_ALLOWED_ACE_TYPE, "Unexpected staging ACE type");
         auto sid = &allowed->SidStart;
-        if (EqualSid(sid, userSid)) {
+        // Runtime caches contain only public application binaries. Administrative cleanup may
+        // remove another user's cache, but must still reject every non-administrative write ACE.
+        if (EqualSid(sid, userSid) || (runtimeCacheCleanup && !EqualSid(sid, adminBuffer) &&
+                                      !EqualSid(sid, systemBuffer))) {
             require((allowed->Mask & ~(FILE_GENERIC_READ | FILE_GENERIC_EXECUTE)) == 0,
                     "Staging user must have read/execute access only");
             continue;
@@ -516,7 +519,7 @@ static void verifyProtectedDirectory(const std::filesystem::path &directory) {
     }
     require(admin && system, "Incomplete staging ACL");
 }
-static void createProtectedDirectory(const std::filesystem::path &directory) {
+void createProtectedDirectory(const std::filesystem::path &directory) {
     PSECURITY_DESCRIPTOR descriptor = nullptr;
     require(ConvertStringSecurityDescriptorToSecurityDescriptorW(L"O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)",
                                                                  SDDL_REVISION_1, &descriptor, nullptr) != 0,
@@ -560,7 +563,8 @@ Staging::~Staging() {
         RemoveDirectoryW(directory.c_str());
     }
 }
-void removeProtectedTree(const std::filesystem::path &path, const std::filesystem::path &sessionRoot) {
+void removeProtectedTree(const std::filesystem::path &path, const std::filesystem::path &sessionRoot,
+                         bool runtimeCacheCleanup) {
     const auto parent = std::filesystem::absolute(sessionRoot).lexically_normal();
     const auto target = std::filesystem::absolute(path).lexically_normal();
     auto relative = target.lexically_relative(parent);
@@ -568,10 +572,10 @@ void removeProtectedTree(const std::filesystem::path &path, const std::filesyste
             "Refusing deletion outside the protected browser session directory");
     if (!std::filesystem::exists(target))
         return;
-    verifyProtectedDirectory(target);
+    verifyProtectedDirectory(target, runtimeCacheCleanup);
     if (std::filesystem::is_directory(target))
         for (const auto &entry : std::filesystem::directory_iterator(target))
-            removeProtectedTree(entry.path(), parent);
+            removeProtectedTree(entry.path(), parent, runtimeCacheCleanup);
     require(std::filesystem::remove(target), "Cannot remove owned browser resource");
 }
 void Staging::allowUserRead() {
@@ -605,6 +609,14 @@ void recoverStaging() {
     verifyProtectedDirectory(root);
     for (const auto &entry : std::filesystem::directory_iterator(root)) {
         auto name = entry.path().filename().wstring();
+        if (name.size() == 70 && name.substr(0, 6) == L"cache-" &&
+            name.find_first_not_of(L"0123456789abcdef", 6) == std::wstring::npos) {
+            verifyProtectedDirectory(entry.path());
+            removeProtectedTree(entry.path() / L"browser", entry.path(), true);
+            DeleteFileW((entry.path() / L"complete.txt").c_str());
+            require(RemoveDirectoryW(entry.path().c_str()) != 0, "Cannot remove owned runtime cache");
+            continue;
+        }
         if (name.size() != 40 || name.substr(0, 8) != L"session-" ||
             name.find_first_not_of(L"0123456789abcdef", 8) != std::wstring::npos)
             continue;

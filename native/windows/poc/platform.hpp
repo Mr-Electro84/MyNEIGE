@@ -84,7 +84,10 @@ int vaultWorker();
 int vaultSelfTest();
 int vaultForget();
 void grantUserRead(const std::filesystem::path &path);
-void removeProtectedTree(const std::filesystem::path &path, const std::filesystem::path &sessionRoot);
+void removeProtectedTree(const std::filesystem::path &path, const std::filesystem::path &sessionRoot,
+                         bool runtimeCacheCleanup = false);
+void verifyProtectedDirectory(const std::filesystem::path &path, bool runtimeCacheCleanup = false);
+void createProtectedDirectory(const std::filesystem::path &path);
 void requirePrivilegedParent();
 int securityProbe();
 int privilegeTest();

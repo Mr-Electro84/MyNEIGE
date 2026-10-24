@@ -534,6 +534,7 @@ int adapterTest(const Options &options) {
     }
 }
 int connectSession(const Options &options) {
+    const auto startupStarted = GetTickCount64();
     require(isAdministrator(), "connect requires an elevated console");
     if (options.browserMode)
         selectInteractiveUser();
@@ -595,12 +596,15 @@ int connectSession(const Options &options) {
     };
     try {
         tap.create();
+        std::cout << "STARTUP_TAP elapsed_ms=" << GetTickCount64() - startupStarted << std::endl;
         firewall.install(staging.executable.wstring(), &tap.identity);
         if (options.browserMode) {
             staging.allowUserRead();
             browser = std::make_unique<BrowserPilot>();
             browser->prepare(staging, options.projectRoot);
+            std::cout << "STARTUP_BROWSER_PREPARED elapsed_ms=" << GetTickCount64() - startupStarted << std::endl;
             browser->launch(firewall);
+            std::cout << "STARTUP_FORM_READY elapsed_ms=" << GetTickCount64() - startupStarted << std::endl;
         }
         uint16_t managementPort = 0;
         auto listener = loopbackListener(managementPort);
@@ -824,6 +828,7 @@ int connectSession(const Options &options) {
         std::cout << "HTTPS_TLS_VERIFIED status=" << status << " (HEAD only; no student page body collected)\n";
         if (browser)
             browser->ready(firewall, port, token);
+        std::cout << "STARTUP_VPN_READY elapsed_ms=" << GetTickCount64() - startupStarted << std::endl;
         if (options.qualification) {
             // Remove only our own low-priority tunnel route. Host connectivity is never disabled.
             route.remove();

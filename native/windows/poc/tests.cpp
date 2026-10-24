@@ -1,4 +1,5 @@
 #include "session.hpp"
+#include "startup.hpp"
 
 namespace neige {
 int selfTest() {
@@ -17,6 +18,12 @@ int selfTest() {
         }
         require(rejected, "Expected rejection did not occur");
     };
+    test("SHA256 matches standard empty and abc vectors", [] {
+        require(sha256Text("") == "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+                "Empty SHA256 mismatch");
+        require(sha256Text("abc") == "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+                "SHA256 abc mismatch");
+    });
     test("host snapshot tolerates automatic metric variation only", [] {
         Adapter adapter;
         adapter.address = 0xc0a80101;

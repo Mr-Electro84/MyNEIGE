@@ -1,5 +1,6 @@
 #include "session.hpp"
 #include "browser.hpp"
+#include "startup.hpp"
 
 int wmain(int argc, wchar_t **argv) {
     try {
@@ -15,6 +16,10 @@ int wmain(int argc, wchar_t **argv) {
             return neige::vaultSelfTest();
         if (command == "vault-forget")
             return neige::vaultForget();
+        if (command == "runtime-cache-probe") {
+            neige::require(argc == 3, "Missing runtime cache probe path");
+            return neige::runtimeCacheProbe(argv[2]);
+        }
         neige::Winsock sockets;
         if (command == "self-test")
             return neige::selfTest();
@@ -41,6 +46,7 @@ int wmain(int argc, wchar_t **argv) {
             return 0;
         }
         neige::Options options;
+        std::string logName;
         for (int i = 2; i < argc; ++i) {
             std::wstring key = argv[i];
             neige::require(i + 1 < argc, "Option value missing");
@@ -51,6 +57,8 @@ int wmain(int argc, wchar_t **argv) {
                 options.openvpn = value;
             else if (key == L"--project-root")
                 options.projectRoot = value;
+            else if (key == L"--log-name")
+                logName = neige::utf8(value);
             else if (key == L"--dns") {
                 neige::require(options.dns.size() < 4, "At most four VPN DNS servers");
                 options.dns.push_back(neige::ipv4(neige::utf8(value)));
@@ -61,6 +69,26 @@ int wmain(int argc, wchar_t **argv) {
             else
                 throw std::runtime_error(
                     "Unknown option. Credentials are accepted only through the masked local console");
+        }
+        if (command == "payload-check") {
+            neige::validateDistribution(options.projectRoot);
+            return 0;
+        }
+        if (command == "runtime-cache-test") {
+            if (!logName.empty()) neige::openDistributionLog(logName);
+            return neige::runtimeCacheTest(options.projectRoot);
+        }
+        if (command == "distribution-browse" || command == "distribution-test") {
+            neige::openDistributionLog(logName);
+            try {
+                if (command == "distribution-test") return neige::browserTest(options.projectRoot);
+                options.browserMode = true;
+                options.seconds = 1800;
+                return neige::connectSession(options);
+            } catch (const std::exception &error) {
+                if (std::string(error.what()) == "Cancelled in browser") return 0;
+                throw;
+            }
         }
         if (command == "inspect")
             return neige::inspect(options);
@@ -115,6 +143,9 @@ int wmain(int argc, wchar_t **argv) {
         return command == "help" ? 0 : 2;
     } catch (const std::exception &error) {
         std::cerr << "ERROR: " << error.what() << "\n";
+        return 1;
+    } catch (...) {
+        std::cerr << "ERROR: Manifeste ou appel Windows invalide\n";
         return 1;
     }
 }

@@ -14,7 +14,7 @@ if (!$Worker) {
         $setupResult = Join-Path $out ('setup-' + [Guid]::NewGuid().ToString('N') + '.json')
         $setupLog = Join-Path $out 'openvpn-preparation.txt'
         $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        $preparation = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\openvpn-setup.ps1') -Ensure -ResultFile $setupResult 2>&1
+        $preparation = & (Join-Path $root 'scripts\openvpn-setup.ps1') -Ensure -ResultFile $setupResult 2>&1
         $setupCode = $LASTEXITCODE; $ErrorActionPreference = $previous
         $preparation | Out-File -LiteralPath $setupLog -Encoding utf8
         if (!(Test-Path -LiteralPath $setupResult)) { throw "La preparation OpenVPN n'a pas retourne de resultat (code $setupCode). Diagnostic : $setupLog" }
@@ -35,11 +35,15 @@ if (!$Worker) {
     }
     $exitFile = Join-Path $out 'exit-code.txt'
     if (Test-Path -LiteralPath $exitFile) { Remove-Item -LiteralPath $exitFile }
-    $p = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $root -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-Worker','-OpenVpn',('"'+$OpenVpn+'"'))
+    $logName = 'session-' + [Guid]::NewGuid().ToString('N') + '.txt'
+    $p = Start-Process $binary -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $root -ArgumentList @('distribution-browse','--project-root',('"'+$root+'"'),'--profile',('"'+(Join-Path $root 'VPN_Universite_Avignon.ovpn')+'"'),'--openvpn',('"'+$OpenVpn+'"'),'--log-name',$logName)
     Write-Output "MyNEIGE demarre (controleur PID $($p.Id)). Le formulaire s'ouvre apres les controles de protection."
     Write-Output "Diagnostic local sans identifiants : $(Join-Path $out 'live-session.txt')"
     # Keep the launcher alive so execution hosts do not reap the supervised tree.
     $p.WaitForExit()
+    $protectedLog = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) ('MyNEIGE-Logs\' + $logName)
+    if (Test-Path -LiteralPath $protectedLog) { Copy-Item -LiteralPath $protectedLog -Destination (Join-Path $out 'live-session.txt') }
+    [IO.File]::WriteAllText($exitFile, [string]$p.ExitCode)
     exit $p.ExitCode
 }
 Set-Location -LiteralPath $root

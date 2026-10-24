@@ -6,7 +6,9 @@ const UNIVERSITY_LINKS = Object.freeze([
   { id: 'university-directory', label: 'Annuaire (VPN)', url: 'https://annuaire.univ-avignon.fr/' },
   { id: 'university-projects', label: 'Gestionnaire de projets (VPN)', url: 'https://projets.univ-avignon.fr/' },
   { id: 'university-moodle', label: 'E-UAPV/Moodle', url: 'https://e-uapv.univ-avignon.fr/' },
-  { id: 'university-timetable', label: 'EDT', url: 'https://edt.univ-avignon.fr/' }
+  { id: 'university-timetable', label: 'EDT', url: 'https://edt.univ-avignon.fr/' },
+  { id: 'university-mail', label: 'Mail', url: 'https://partage.univ-avignon.fr/' },
+  { id: 'university-nextcloud', label: 'Nextcloud', url: 'https://cloud.univ-avignon.fr/' }
 ].map(link => Object.freeze(link)));
 const bindings = new WeakMap();
 function historyTarget(contents, offset) {

@@ -2,6 +2,7 @@
 const path = require('node:path');
 const { allowedURL } = require('./policy');
 const { pdfNavigationAllowed } = require('./pdf-policy');
+const { embeddedNavigationAllowed } = require('./embedded-content-policy');
 const { installNavigation } = require('./navigation');
 const { APP_ICON } = require('./app-icon');
 function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready = () => true, Menu = require('electron').Menu, windowOptions = {}, universityWindow }) {
@@ -20,7 +21,8 @@ function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show
   window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   for (const event of ['will-navigate', 'will-redirect', 'will-frame-navigate']) {
     window.webContents.on(event, (details, url) => {
-      if (!allowedURL(typeof url === 'string' ? url : details.url) &&
+      const target = typeof url === 'string' ? url : details.url;
+      if (!allowedURL(target) && !embeddedNavigationAllowed(details) &&
           !(event === 'will-frame-navigate' && pdfNavigationAllowed(details))) details.preventDefault();
     });
   }

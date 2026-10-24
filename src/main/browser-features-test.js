@@ -8,6 +8,7 @@ const { navigationFor } = require('./navigation');
 const { protectRequests } = require('./session-policy');
 const { APP_ICON } = require('./app-icon');
 const { nativeImage } = require('electron');
+const { embeddedFixture, runEmbeddedTests } = require('./embedded-content-test');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
   const deadline = Date.now() + 5000;
@@ -49,6 +50,8 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
   const payload = pdfFixture();
   let slowStream, progressDialog = false, popupPosts = 0;
   browserSession.protocol.handle('https', async request => {
+    const embedded = embeddedFixture(request);
+    if (embedded) return embedded;
     const url = new URL(request.url);
     if (['/inline.pdf', '/inline-auto.pdf', '/inline-post.pdf'].includes(url.pathname)) {
       if (url.pathname === '/inline-post.pdf' && (request.method !== 'POST' || await request.text() !== 'fixture=local-only'))
@@ -105,7 +108,9 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
       ['university-directory', 'https://annuaire.univ-avignon.fr/'],
       ['university-projects', 'https://projets.univ-avignon.fr/'],
       ['university-moodle', 'https://e-uapv.univ-avignon.fr/'],
-      ['university-timetable', 'https://edt.univ-avignon.fr/']
+      ['university-timetable', 'https://edt.univ-avignon.fr/'],
+      ['university-mail', 'https://partage.univ-avignon.fr/'],
+      ['university-nextcloud', 'https://cloud.univ-avignon.fr/']
     ];
     const primaryContents = window.webContents, windowCount = windows.size;
     for (const [id, url] of services) {
@@ -117,7 +122,7 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
         throw new Error('University menu replaced the window or session'); ++checks;
     }
     navigation.menu.getMenuItemById('back').click();
-    await until(() => window.webContents.getURL() === services[3][1] && !window.webContents.isLoading()); ++checks;
+    await until(() => window.webContents.getURL() === services.at(-2)[1] && !window.webContents.isLoading()); ++checks;
     vpnReady = false; navigation.refresh();
     for (const [id] of services) {
       const item = navigation.menu.getMenuItemById(id);
@@ -125,7 +130,7 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
       item.click(); // Also exercise the readiness guard against an already queued click.
     }
     await pause(100);
-    if (window.webContents.getURL() !== services[3][1]) throw new Error('University menu navigated without VPN'); ++checks;
+    if (window.webContents.getURL() !== services.at(-2)[1]) throw new Error('University menu navigated without VPN'); ++checks;
     vpnReady = true; navigation.refresh();
     navigation.menu.getMenuItemById('home').click();
     await until(() => window.webContents.getURL() === START_URL && !window.webContents.isLoading());
@@ -152,6 +157,8 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     await expectPdf(pdfWindow, popupPdf);
     if (pdfWindow.webContents.session !== browserSession || downloads.records().length) throw new Error('Inline PDF changed session or started a download');
     pdfWindow.destroy(); ++checks;
+    checks += await runEmbeddedTests({ window, directory });
+    await window.loadURL(one);
     // Real renderer navigation must not acquire a blanket internal-page exception.
     const deniedNavigation = [];
     const observe = (event, url) => { if (event.defaultPrevented) deniedNavigation.push(typeof url === 'string' ? url : event.url); };

@@ -66,6 +66,20 @@ int selfTest() {
                     !universityHost("127.0.0.1") && !universityHost("a..univ-avignon.fr"),
                 "University scope mismatch");
     });
+    test("browser scope admits RENATER and embedded learning dependencies only", [] {
+        for (const auto &host : {"partage.univ-avignon.fr", "cloud.univ-avignon.fr", "sp.partage.renater.fr",
+                                 "webmail.partage.renater.fr", "www.youtube.com", "www.youtube-nocookie.com",
+                                 "rr1---sn-test.googlevideo.com", "i.ytimg.com", "youtubei.googleapis.com",
+                                 "youtube.googleapis.com", "jnn-pa.googleapis.com", "yt3.ggpht.com",
+                                 "www.gstatic.com", "fonts.gstatic.com", "www.google.com", "fonts.googleapis.com",
+                                 "avignon.h5p.com", "eu-west-1.cdn.h5p.com", "h5p.org", "content.h5p.io",
+                                 "cdnjs.cloudflare.com"})
+            require(browserHost(host), "Missing browser dependency");
+        for (const auto &host : {"evil.test", "evilyoutube.com", "youtube.com.evil.test", "renater.fr.evil.test",
+                                 "evilrenater.fr", "127.0.0.1", "a..youtube.com", "google.com",
+                                 "drive.google.com", "storage.googleapis.com", "youtube.com.", "h5p.com.evil.test"})
+            require(!browserHost(host), "Browser dependency allowlist escaped");
+    });
     const std::string base =
         "dev tun\nclient\nremote vpn.example.test 443 tcp-client\nauth-user-pass\nremote-cert-tls "
         "server\nncp-ciphers AES-128-GCM:AES-128-CBC\nauth SHA256\n<ca>\n-----BEGIN CERTIFICATE-----\nYWJj\n-----END "

@@ -340,6 +340,7 @@ std::string basic64(const std::string &text);
 bool constantEqual(const std::string &a, const std::string &b);
 bool validHost(const std::string &host);
 bool universityHost(const std::string &host);
+bool browserHost(const std::string &host);
 struct ConnectRequest {
     std::string host;
     std::string authorization;

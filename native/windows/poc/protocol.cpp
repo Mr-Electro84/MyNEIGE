@@ -1,11 +1,30 @@
 #include "common.hpp"
 
 namespace neige {
+static bool domainHost(const std::string &host, const std::string &domain) {
+    const auto suffix = "." + domain;
+    return host == domain ||
+           (host.size() > suffix.size() && host.compare(host.size() - suffix.size(), suffix.size(), suffix) == 0);
+}
 bool universityHost(const std::string &host) {
     const std::string suffix = ".univ-avignon.fr";
     return validHost(host) &&
            (host == "univ-avignon.fr" ||
             (host.size() > suffix.size() && host.compare(host.size() - suffix.size(), suffix.size(), suffix) == 0));
+}
+bool browserHost(const std::string &host) {
+    if (!validHost(host))
+        return false;
+    // Le relais voit seulement CONNECT : Electron impose en complément le
+    // contexte iframe universitaire et les chemins des lecteurs externes.
+    for (const auto &domain : {"univ-avignon.fr", "renater.fr", "youtube.com", "youtube-nocookie.com",
+                               "googlevideo.com", "ytimg.com", "h5p.com", "h5p.org", "h5p.io"})
+        if (domainHost(host, domain))
+            return true;
+    static const std::set<std::string> resources{"youtubei.googleapis.com", "youtube.googleapis.com",
+        "jnn-pa.googleapis.com", "yt3.ggpht.com", "www.gstatic.com", "fonts.gstatic.com",
+        "fonts.googleapis.com", "cdnjs.cloudflare.com", "www.google.com"};
+    return resources.contains(host);
 }
 std::string managementFrame(const std::string &value) {
     require(!value.empty() && value.size() < 8192 && value.find_first_of("\r\n") == std::string::npos &&

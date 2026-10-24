@@ -16,11 +16,13 @@ Chaque fenêtre universitaire dispose d’un menu natif Windows :
 | Université → Gestionnaire de projets (VPN) | — | Ouvre `https://projets.univ-avignon.fr/` dans la fenêtre principale. |
 | Université → E-UAPV/Moodle | — | Ouvre `https://e-uapv.univ-avignon.fr/` dans la fenêtre principale. |
 | Université → EDT | — | Ouvre `https://edt.univ-avignon.fr/` dans la fenêtre principale. |
+| Université → Mail | — | Ouvre `https://partage.univ-avignon.fr/` dans la fenêtre principale. |
+| Université → Nextcloud | — | Ouvre `https://cloud.univ-avignon.fr/` dans la fenêtre principale. |
 | Fichiers → Téléchargements | Ctrl + J | Affiche les états récents et permet d’annuler les transferts en cours. |
 
 Précédent/suivant sont désactivés lorsqu’aucune entrée correspondante n’est disponible ou admise. Les contrôles de domaines et le proxy restent ceux de la session ; aucun navigateur externe n’est ouvert. L’accueil conserve les cookies de la session. Le préremplissage CAS reste à usage unique : revenir à une page de connexion ne redélivre pas les identifiants.
 
-Le menu Université conserve la fenêtre initialement ouverte sur APPIGS, son historique et sa session ; depuis un pop-up, il cible aussi cette fenêtre principale, sans remplacer le contenu du pop-up. Ses commandes sont désactivées si le VPN n’est pas prêt ou si la fenêtre principale est fermée, et leur exécution revérifie ces conditions. Les mentions « VPN » sont informatives : toutes les requêtes MyNEIGE, même vers les services accessibles publiquement, restent acheminées dans le tunnel. Aucun nouveau domaine n’a été ajouté à la politique. Une session conservée ne garantit pas une authentification automatique sur chaque service ; les redirections CAS et l’accès réel restent à qualifier.
+Le menu Université conserve la fenêtre initialement ouverte sur APPIGS, son historique et sa session ; depuis un pop-up, il cible aussi cette fenêtre principale, sans remplacer le contenu du pop-up. Ses commandes sont désactivées si le VPN n’est pas prêt ou si la fenêtre principale est fermée, et leur exécution revérifie ces conditions. Les mentions « VPN » sont informatives : toutes les requêtes MyNEIGE, même vers les services accessibles publiquement, restent acheminées dans le tunnel. L'ajout Mail/Nextcloud et les exceptions YouTube/H5P sont décrits dans [les autorisations de contenus intégrés](EMBEDDED_CONTENT.md). Une session conservée ne garantit pas une authentification automatique sur chaque service ; les redirections CAS et l’accès réel restent à qualifier.
 
 ## Icône Electron
 
@@ -38,7 +40,7 @@ L’icône de la barre de titre a été vérifiée visuellement sur une page fic
 
 Les téléchargements passent par le moteur Chromium de la session universitaire, avec son contexte d’authentification, son proxy et WFP. Aucun transfert n’est délégué à Node, curl ou une autre application. Une boîte « Enregistrer le fichier » propose un nom normalisé et laisse l’utilisateur choisir la destination, avec confirmation d’écrasement.
 
-- HTTPS uniquement vers les domaines universitaires déjà admis ; toute la chaîne de redirections est contrôlée.
+- HTTPS uniquement vers les domaines universitaires et RENATER admis ; toute la chaîne de redirections est contrôlée. Les exceptions vidéo ne donnent pas accès au téléchargement des flux externes.
 - Les fichiers `blob:` générés par la page sont acceptés seulement si leur origine correspond à la page universitaire initiatrice.
 - Une fenêtre de téléchargement doit appartenir à la session et le VPN doit être prêt. Les pièces jointes ouvertes dans une nouvelle fenêtre utilisent la destination explicitement admise par le contrôleur de fenêtres.
 - Les pop-ups conservent le cycle natif Chromium : corps POST, fenêtre nommée et lien `window.opener`. Une fenêtre initialement `about:blank` peut être préparée par une page universitaire HTTPS ; ses navigations et transferts restent filtrés. Toutes ces fenêtres utilisent la même session, les mêmes menus et les mêmes protections, sans accès Node ni API exposée au site.

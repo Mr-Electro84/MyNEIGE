@@ -36,7 +36,7 @@ Une variation réseau, un changement d’identité ou une sortie de `CONNECTED` 
 
 ## Limites du choix
 
-Le proxy transporte HTTPS/WSS sur 443, avec DNS IPv4 UDP/TCP natif lié au tunnel et au plus 16 flux CONNECT simultanés. Le mode console est limité à APPIGS ; le début de J2 autorise temporairement `univ-avignon.fr` et ses sous-domaines, jusqu’à identification du parcours réel. Toute autre destination, adresse locale, schéma ou port est refusé.
+Le proxy transporte HTTPS/WSS sur 443, avec DNS IPv4 UDP/TCP natif lié au tunnel et au plus 16 flux CONNECT simultanés. Le mode console est limité à APPIGS ; le navigateur autorise `univ-avignon.fr`, `renater.fr` et leurs sous-domaines, ainsi que les dépendances YouTube/H5P énumérées dans [les règles de contenus intégrés](EMBEDDED_CONTENT.md). Electron restreint ces dernières au contexte iframe d'une page universitaire. Toute autre destination, adresse locale, schéma ou port est refusé.
 
 IPv6 applicatif est bloqué ; IPv6 de l’hôte reste actif. Les sondes UDP ne constituent pas un test complet des API WebRTC ou HTTP/3. La veille, un changement physique de réseau, un VPN tiers, les conflits de sous-réseaux, le MFA et le parcours ENT/CAS complet restent des éléments de recette. Packaging et séparation en service installé relèvent de J3.
 

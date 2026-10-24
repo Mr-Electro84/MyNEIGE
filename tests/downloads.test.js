@@ -6,6 +6,8 @@ const { createDownloads, downloadAllowed, safeFilename } = require('../src/main/
 const PAGE = 'https://www.appigs.univ-avignon.fr/extranet/etu_suivi.html';
 test('download chain permits university HTTPS and only same-origin blobs', () => {
   assert(downloadAllowed([PAGE, 'https://services.univ-avignon.fr/document.pdf'], PAGE));
+  assert(downloadAllowed(['https://webmail.partage.renater.fr/attachment'], 'https://webmail.partage.renater.fr/'));
+  assert(!downloadAllowed(['https://rr1.googlevideo.com/videoplayback'], PAGE));
   assert(downloadAllowed(['blob:https://www.appigs.univ-avignon.fr/fake-id'], PAGE));
   for (const chain of [[], ['http://www.appigs.univ-avignon.fr/f.pdf'], ['file:///C:/secret'], ['data:text/plain,secret'],
     ['https://univ-avignon.fr.evil.test/f'], [PAGE, 'https://evil.test/file'], ['https://u@cas.univ-avignon.fr/file'],

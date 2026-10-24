@@ -5,6 +5,13 @@ const { START_URL, allowedURL, validateCredentials } = require('../src/main/poli
 test('university HTTPS and WSS are admitted', () => {
   for (const url of [START_URL, 'https://univ-avignon.fr/', 'https://cas.univ-avignon.fr/cas/login?service=test', 'wss://ent.univ-avignon.fr/socket']) assert(allowedURL(url));
 });
+test('RENATER mail services use HTTPS/WSS 443 without admitting video browsing', () => {
+  for (const url of ['https://sp.partage.renater.fr/', 'https://webmail.partage.renater.fr/', 'wss://ws.partage.renater.fr/socket'])
+    assert(allowedURL(url));
+  for (const url of ['https://renater.fr.evil.test/', 'https://evilrenater.fr/', 'http://sp.partage.renater.fr/',
+    'https://sp.partage.renater.fr:7071/', 'https://u@sp.partage.renater.fr/', 'https://www.youtube.com/', 'https://avignon.h5p.com/'])
+    assert(!allowedURL(url));
+});
 test('lookalike domains and URL user-info cannot escape the allowlist', () => {
   for (const url of ['https://univ-avignon.fr.evil.test/', 'https://eviluniv-avignon.fr/', 'https://univ-avignon.fr@evil.test/', 'https://a@cas.univ-avignon.fr/', 'https://evil.test/?https://cas.univ-avignon.fr/', 'https://cas.univ-avignon.fr./']) assert(!allowedURL(url), url);
 });

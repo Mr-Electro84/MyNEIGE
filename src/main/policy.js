@@ -3,10 +3,13 @@ const START_URL = 'https://www.appigs.univ-avignon.fr/extranet/etu_suivi.html';
 function universityHost(host) {
   return typeof host === 'string' && (host === 'univ-avignon.fr' || host.endsWith('.univ-avignon.fr'));
 }
+function domainHost(host, domain) {
+  return typeof host === 'string' && (host === domain || host.endsWith(`.${domain}`));
+}
 function allowedURL(value) {
   try {
     const url = new URL(value);
-    return ['https:', 'wss:'].includes(url.protocol) && universityHost(url.hostname) &&
+    return ['https:', 'wss:'].includes(url.protocol) && (universityHost(url.hostname) || domainHost(url.hostname, 'renater.fr')) &&
       !url.username && !url.password && (!url.port || url.port === '443');
   } catch { return false; }
 }
@@ -15,4 +18,4 @@ function validateCredentials(value) {
   return ['username', 'password'].every(key => typeof value[key] === 'string' &&
     value[key].length > 0 && Buffer.byteLength(value[key], 'utf8') <= 4096 && !/[\x00-\x1f\x7f]/u.test(value[key]));
 }
-module.exports = { START_URL, universityHost, allowedURL, validateCredentials };
+module.exports = { START_URL, universityHost, domainHost, allowedURL, validateCredentials };

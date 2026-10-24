@@ -124,7 +124,7 @@ int relayWorker() {
                     return;
                 }
                 wipe(request.authorization);
-                if (request.host != host && !(scope == "university" && universityHost(request.host))) {
+                if (request.host != host && !(scope == "university" && browserHost(request.host))) {
                     sendText(client.s, "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                     return;
                 }

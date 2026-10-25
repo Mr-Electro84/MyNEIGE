@@ -144,7 +144,7 @@ async function control(line) {
     send('BROWSER_STAGE CHILD_BLOCKED');
     const localSession = session.fromPartition(`form-${Date.now()}`, { cache: false });
     localSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') }));
-    form = new BrowserWindow({ title: 'MyNEIGE · Pilote Windows', icon: APP_ICON, width: 700, height: 1040, show: !testMode,
+    form = new BrowserWindow({ title: 'MyNEIGE · Version Alpha', icon: APP_ICON, width: 1120, height: 900, show: !testMode,
       webPreferences: { session: localSession, preload: path.join(__dirname, '../preload/form.js'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
     send('BROWSER_STAGE FORM_CREATED');
     form.setMenu(Menu.buildFromTemplate([helpMenu(form)]));

@@ -1,20 +1,61 @@
-:root { font: 16px/1.5 system-ui, sans-serif; color: #163348; background: #f1f5f8; }
-body { margin: 0; padding: 38px; }
-main { max-width: 500px; margin: auto; }
-.label { font-size: 12px; letter-spacing: .13em; font-weight: 700; color: #386878; }
-h1 { font-size: 30px; line-height: 1.2; margin: 12px 0; }
-p { color: #4c6372; }
-#state { background: #e1edf2; padding: 14px; border-radius: 8px; min-height: 24px; }
-label { display: block; margin: 18px 0 6px; font-weight: 600; }
-input { box-sizing: border-box; width: 100%; padding: 12px; font: inherit; border: 1px solid #a7bac5; border-radius: 6px; background: white; }
-button { width: 100%; padding: 13px; margin-top: 22px; border: 0; border-radius: 6px; font: inherit; font-weight: 600; color: white; background: #185f78; cursor: pointer; }
-button:disabled { opacity: .5; cursor: default; }
-.secondary { margin-top: 10px; color: #345264; border: 1px solid #a7bac5; background: transparent; }
-.note { font-size: 13px; }
-.vault { padding: 0 0 12px; border-bottom: 1px solid #c8d5dd; }
-.remember { display: flex; gap: 10px; align-items: center; font-size: 13px; font-weight: 400; }
-.remember input { width: 18px; height: 18px; flex-shrink: 0; }
-.disclaimer { margin: 18px 0; padding: 14px 16px; border-left: 3px solid #718d9e; border-radius: 6px; background: #e8eef2; font-size: 12px; line-height: 1.5; }
-.disclaimer h2 { font-size: 14px; margin: 0 0 8px; color: #23495e; }
-.disclaimer p { margin: 8px 0 0; color: #3d5666; }
-:focus-visible { outline: 3px solid #7ab3cc; outline-offset: 3px; }
+:root {
+  font: 15px/1.55 system-ui, sans-serif;
+  color: #202a51;
+  background: #f3f5fc;
+  color-scheme: light;
+  /* Bleu et pervenche repris du logo MyNEIGE. */
+  --brand-blue: #182f9e;
+  --brand-periwinkle: #5d6dbb;
+  --muted: #505d82;
+  --border: #c5cde9;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; }
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(340px, 1fr);
+  gap: 24px;
+  align-items: start;
+  max-width: 1180px;
+  margin: auto;
+}
+.information-panel, .login-panel { min-width: 0; padding: 28px; border: 1px solid #dce1f2; border-radius: 18px; }
+.information-panel { padding: 20px; background: #f9faff; }
+.login-panel { background: white; box-shadow: 0 8px 28px #182f9e0a; border-top: 4px solid var(--brand-blue); }
+.brand { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+.label { margin: 0; font-size: 17px; letter-spacing: .06em; font-weight: 750; color: var(--brand-blue); }
+.alpha-badge { padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: #eef0fb; color: var(--brand-blue); font-size: 12px; font-weight: 600; }
+h1 { font-size: 32px; line-height: 1.2; margin: 0 0 12px; letter-spacing: -.025em; color: var(--brand-blue); }
+h2 { font-size: 25px; line-height: 1.3; margin: 0 0 8px; color: var(--brand-blue); }
+p { color: var(--muted); margin: 10px 0; }
+#state { background: #e9edfc; color: var(--brand-blue); padding: 12px 16px; border: 1px solid #d6def7; border-radius: 10px; min-height: 52px; margin: 16px 0; font-size: 14px; }
+.login-intro { margin: 0 0 26px; }
+label { display: block; margin: 20px 0 8px; font-weight: 600; }
+input { width: 100%; min-width: 0; padding: 12px; font: inherit; color: inherit; border: 1px solid var(--border); border-radius: 8px; background: white; }
+input:disabled { background: #f3f5fa; color: var(--muted); }
+input[type="checkbox"] { accent-color: var(--brand-blue); }
+button { width: 100%; padding: 13px 16px; margin-top: 22px; border: 1px solid transparent; border-radius: 8px; font: inherit; font-weight: 600; line-height: 1.4; color: white; background: var(--brand-blue); cursor: pointer; }
+button:hover:enabled { background: #122579; }
+button:disabled { opacity: .55; cursor: default; }
+.secondary { margin-top: 10px; color: var(--brand-blue); border-color: var(--border); background: white; }
+.secondary:hover:enabled { background: #eef0fb; border-color: var(--brand-periwinkle); }
+.note { font-size: 13px; line-height: 1.65; }
+.vault { margin-top: 14px; padding-top: 8px; border-top: 1px solid #dce1f2; }
+.vault .note { margin-bottom: 6px; }
+.vault .secondary { padding: 11px 14px; font-size: 14px; }
+.remember { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; font-weight: 400; color: var(--muted); }
+.remember input { width: 18px; height: 18px; margin: 2px 0 0; padding: 0; flex-shrink: 0; }
+.login-panel > .note { margin: 24px 0 0; padding-top: 20px; border-top: 1px solid #dce1f2; }
+.disclaimer { margin: 16px 0 0; padding: 14px 16px; border-left: 3px solid var(--brand-periwinkle); border-radius: 8px; background: #eef0f9; font-size: 12px; line-height: 1.5; }
+.disclaimer h2 { font-size: 14px; margin: 0 0 10px; }
+.disclaimer p { margin: 6px 0 0; }
+:focus-visible { outline: 3px solid var(--brand-periwinkle); outline-offset: 3px; }
+@media (max-width: 860px) {
+  body { padding: 20px; }
+  main { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 20px; }
+}
+@media (max-width: 480px) {
+  body { padding: 12px; }
+  .information-panel, .login-panel { padding: 20px; border-radius: 12px; }
+  h1 { font-size: 28px; }
+}

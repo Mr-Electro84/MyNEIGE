@@ -64,7 +64,9 @@ Ces exceptions ne modifient pas `allowedURL`, les domaines réseau, le proxy, WF
 
 ## Avertissement de connexion
 
-L’écran affiche, avant les champs, un encadré « Un pilote à utiliser avec discernement ». Il indique le caractère expérimental et indépendant, l’utilisation aux risques de l’utilisateur, l’absence de garantie, et la déclinaison de responsabilité de l’auteur pour les comptes VPN/CAS, pertes/altérations/divulgations de données et inexactitudes affichées. Le texte réserve les limites de la loi applicable et les droits auxquels on ne peut renoncer.
+L’écran de connexion affiche « Version Alpha » et reprend le bleu `#182f9e` et la pervenche `#5d6dbb` du logo MyNEIGE. Les informations, l’état de la connexion, l’avertissement et les actions Windows Hello occupent la colonne de gauche ; la saisie manuelle et les précisions sur les identifiants occupent celle de droite. La fenêtre s’ouvre en 1 120 × 900 pixels et la page repasse sur une colonne lorsque sa largeur est inférieure ou égale à 860 pixels.
+
+L’encadré « Une version alpha à utiliser avec discernement » indique le caractère expérimental et indépendant, l’utilisation aux risques de l’utilisateur, l’absence de garantie, et la déclinaison de responsabilité de l’auteur pour les comptes VPN/CAS, pertes/altérations/divulgations de données et inexactitudes affichées. Le texte réserve les limites de la loi applicable et les droits auxquels on ne peut renoncer.
 
 Cette formulation exprime une information et une limitation souhaitée, sans prétendre garantir une exonération juridique absolue. Elle accompagne les sections 7 et 8 de la [licence Apache 2.0 du dépôt](../LICENSE), qui reste inchangée. Aucun écran d’acceptation ni case obligatoire n’a été ajouté.
 

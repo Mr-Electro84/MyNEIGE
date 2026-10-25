@@ -12,7 +12,7 @@ npm run test:dist
 
 Prérequis de construction : Windows x64, Node.js/npm, Visual Studio Build Tools C++/SDK Windows et NSIS (`makensis.exe` sur PATH ou installation standard). Pour une installation NSIS personnalisée : `powershell -NoProfile -File scripts/build-distribution.ps1 -NsisPath 'C:\chemin\makensis.exe'`. `npm run dist:dir` produit le dossier et le ZIP sans installateur. Les deux exécutables natifs utilisent le runtime MSVC statique (`/MT`), avec icône et ressources de version.
 
-Sorties sous `dist` : dossier `MyNEIGE-1.0.0-alpha.1-win-x64`, archive `MyNEIGE-1.0.0-alpha.1-win-x64-portable.zip`, installateur `MyNEIGE-1.0.0-alpha.1-win-x64-setup.exe` et `MyNEIGE-1.0.0-alpha.1-win-x64-SHA256SUMS.txt`. Le paquet inclut un guide `LIRE-MOI.md` issu du [guide testeur](ALPHA_TESTER.md), les notices tierces et un manifeste SHA-256 par fichier. Il est actuellement **non signé**.
+Sorties sous `dist` : dossier `MyNEIGE-1.0.1-alpha.1-win-x64`, archive `MyNEIGE-1.0.1-alpha.1-win-x64-portable.zip`, installateur `MyNEIGE-1.0.1-alpha.1-win-x64-setup.exe` et `MyNEIGE-1.0.1-alpha.1-win-x64-SHA256SUMS.txt`. Le paquet inclut un guide `LIRE-MOI.md` issu du [guide testeur](ALPHA_TESTER.md), les notices tierces et un manifeste SHA-256 par fichier. Il est actuellement **non signé**.
 
 Le lanceur `MyNEIGE.exe`, à intégrité normale, utilise un seul Windows PowerShell 5.1 fourni avec Windows. Les empreintes du paquet sont vérifiées par le contrôleur natif ; la préparation OpenVPN s'exécute dans le même processus PowerShell, puis l'UAC démarre directement le contrôleur. Celui-ci écrit ses diagnostics dans un répertoire administratif protégé. Electron reste non administrateur ; ses binaires sont réutilisés depuis un cache protégé et reliés au staging propre à chaque session, avec les contrôles WFP existants. Aucun Node.js/npm ni compilation du programme chez le testeur. Les données utilisateur sont sous `%LOCALAPPDATA%\MyNEIGE`, les diagnostics administratifs sous `%PROGRAMDATA%\MyNEIGE-Logs`. Le ZIP conserve ces dépendances système et emplacements de données ; il ne s’agit pas d’une application sans traces. Voir [les corrections et mesures de démarrage](STARTUP_PERFORMANCE.md).
 
@@ -20,7 +20,23 @@ L’installateur utilise l’emplacement fixe protégé `%ProgramFiles%\MyNEIGE`
 
 La construction utilise **NSIS directement**, déjà installé sur le poste, et le runtime Electron épinglé. Aucun electron-builder n’est nécessaire pour ce premier format au lanceur natif. La proposition ci-dessous conserve les contraintes et choix qui ont guidé l’implémentation ; la recette sur VM propre reste à effectuer avant diffusion élargie.
 
-## Vérifications locales
+## Construction 1.0.1-alpha.1 — 25 octobre 2026
+
+La version du paquet et les ressources des deux exécutables natifs sont passées à `1.0.1-alpha.1`. La construction utilise les sources présentes dans le dépôt et Electron 45.0.0, sans changement des dépendances.
+
+Vérifications locales réalisées pour cette version :
+
+- Compilation du contrôleur et du lanceur x64 réussie.
+- Dossier autonome, ZIP portable et installateur NSIS générés ; version de l'installateur et empreintes du fichier `SHA256SUMS` vérifiées. NSIS a nécessité une exécution hors du bac à sable après une erreur de chargement de DLL système.
+- 34 tests de protocole natif, test DPAPI avec données fictives et inspection du profil embarqué réussis, sans connexion universitaire.
+- 49 tests JavaScript, 9 cas CAS sans soumission automatique, 39 contrôles navigateur et 7 contrôles Mail sur boucle locale réussis.
+- 46 contrôles de préparation OpenVPN réussis, sans installation.
+- 35 contrôles du paquet réussis : intégrité, version, architecture x64, contenu embarqué et rejet de corruption.
+- ZIP extrait dans un chemin avec espaces et accents : les 110 fichiers passent le contrôle d'intégrité et `MyNEIGE.exe --check` réussit avec Node.js/npm retirés du `PATH` ; OpenVPN est détecté prêt sur ce poste.
+
+Les tests Electron et DPAPI ont été exécutés hors du bac à sable après des échecs liés aux restrictions de cet environnement. Les précontrôles WFP avec UAC, le parcours avec VPN réel, l'installation/désinstallation et la recette sur Windows propre ne sont pas rejoués pour cette construction. Les résultats historiques ci-dessous ne constituent pas une validation de ces scénarios sur cette version.
+
+## Vérifications locales de la première livraison
 
 - 30 tests JavaScript et 27 tests de protocole natif réussis.
 - 46 vérifications de préparation OpenVPN réussies : détection, refus, annulation, redémarrage et erreurs, sans installation d’OpenVPN pendant ces tests.

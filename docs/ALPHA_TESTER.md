@@ -1,4 +1,4 @@
-# MyNEIGE 1.0.0-alpha.1 — Alpha Windows
+# MyNEIGE 1.0.1-alpha.1 — Alpha Windows
 
 Développeur : **Matra DevProd**. Licence du programme : Apache 2.0, texte intégral dans `LICENSE`. Les notices Electron et Chromium sont indiquées dans `THIRD-PARTY-NOTICES.txt`.
 

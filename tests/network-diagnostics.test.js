@@ -21,7 +21,7 @@ test('les diagnostics ne contiennent ni URL complète, ni identifiants, ni param
 test('les refus sont dédupliqués et bornés sans modifier la politique', () => {
   let listener;
   const records = [];
-  protectRequests({ webRequest: { onBeforeRequest(callback) { listener = callback; } } }, () => {}, value => records.push(value));
+  protectRequests({ webRequest: { onBeforeRequest(callback) { listener = callback; }, onHeadersReceived() {} } }, () => {}, value => records.push(value));
   const check = url => { let response; listener({ url, resourceType: 'script' }, value => { response = value; }); return response.cancel; };
   assert(check('https://evil.test/private?secret=1'));
   assert(check('https://evil.test/other?secret=2'));

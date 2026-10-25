@@ -1,6 +1,7 @@
 'use strict';
 const { START_URL, allowedURL } = require('./policy');
 const { helpMenu } = require('./about');
+const { mailSsoFor } = require('./mail-sso');
 const UNIVERSITY_LINKS = Object.freeze([
   { id: 'university-ent', label: 'ENT', url: 'https://ent.univ-avignon.fr/' },
   { id: 'university-directory', label: 'Annuaire (VPN)', url: 'https://annuaire.univ-avignon.fr/' },
@@ -22,12 +23,14 @@ function installNavigation({ window, Menu, ready, downloads, universityWindow = 
   const canVisitUniversity = () => ready() && !universityWindow.isDestroyed() && !universityWindow.webContents.isDestroyed();
   const visitUniversity = url => {
     if (window.isDestroyed() || !canVisitUniversity() || !allowedURL(url)) return;
+    mailSsoFor(universityWindow.webContents)?.open(url);
     if (universityWindow.isMinimized()) universityWindow.restore();
     if (universityWindow.isVisible()) universityWindow.focus();
     void universityWindow.webContents.loadURL(url).catch(() => {});
   };
   const run = action => {
     if (window.isDestroyed() || contents.isDestroyed() || !ready()) return;
+    mailSsoFor(contents)?.cancel();
     if (action === 'back' && historyTarget(contents, -1)) contents.navigationHistory.goBack();
     else if (action === 'forward' && historyTarget(contents, 1)) contents.navigationHistory.goForward();
     else if (action === 'home') void contents.loadURL(START_URL).catch(() => {});

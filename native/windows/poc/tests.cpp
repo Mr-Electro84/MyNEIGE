@@ -239,9 +239,17 @@ int selfTest() {
                 "Browser diagnostic rejected");
         require(browserRequestDiagnostic("UI_REQUEST_BLOCKED accounts.google.com subFrame") ==
                     "BROWSER_REQUEST_BLOCKED host=accounts.google.com type=subFrame", "Browser block diagnostic rejected");
+        require(browserRequestDiagnostic("UI_MAIL_SSO RESPONSE https sp.partage.renater.fr POST 302") ==
+                    "BROWSER_MAIL_SSO event=RESPONSE protocol=https host=sp.partage.renater.fr method=POST status=302",
+                "Mail SSO diagnostic rejected");
         for (const auto &line : {"UI_REQUEST_ERROR www.youtube.com/path?secret subFrame ERR_FAILED",
              "UI_REQUEST_ERROR www.youtube.com subFrame secret", "UI_REQUEST_BLOCKED www.youtube.com secret",
-             "UI_REQUEST_BLOCKED www.youtube.com subFrame token=secret"})
+             "UI_REQUEST_BLOCKED www.youtube.com subFrame token=secret",
+             "UI_MAIL_SSO RESPONSE https sp.partage.renater.fr/path?ticket=secret POST 302",
+             "UI_MAIL_SSO RESPONSE https sp.partage.renater.fr POST 99",
+             "UI_MAIL_SSO RESPONSE https sp.partage.renater.fr POST 999",
+             "UI_MAIL_SSO RESPONSE https sp.partage.renater.fr POST 302 token=secret",
+             "UI_MAIL_SSO secret https sp.partage.renater.fr POST 302"})
             require(browserRequestDiagnostic(line).empty(), "Unsafe browser diagnostic accepted");
     });
     test("proxy authentication encoding", [] {

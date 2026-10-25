@@ -24,6 +24,7 @@
     "test:js": "node --test tests/*.test.js",
     "test:cas": "electron tests/cas-electron.cjs",
     "test:browser": "electron tests/browser-features-electron.cjs",
+    "test:mail": "electron tests/mail-sso-electron.cjs",
     "poc:qualify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/qualify-j1.ps1",
     "poc:analyze": "node scripts/analyze-j1.js",
     "browser:test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-wfp.ps1 -Elevate -TestCommand browser-test",

@@ -294,7 +294,8 @@ async function openProtectedSession() {
 }
 function protectedWindow(browserSession = webSession, prefiller = casPrefill) {
   return createProtectedWindow({ BrowserWindow, session: browserSession, prefiller, owners: prefillOwners, show: !testMode,
-    downloads: browserSession === webSession ? downloads : undefined, ready: () => (testMode || vpnReady) && !stopping });
+    downloads: browserSession === webSession ? downloads : undefined, ready: () => (testMode || vpnReady) && !stopping,
+    mailReport: metadata => send(`UI_MAIL_SSO ${metadata}`) });
 }
 function shutdown(failed = false) {
   if (stopping) return;

@@ -5,7 +5,8 @@ const { pdfNavigationAllowed } = require('./pdf-policy');
 const { embeddedNavigationAllowed } = require('./embedded-content-policy');
 const { installNavigation } = require('./navigation');
 const { APP_ICON } = require('./app-icon');
-function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready = () => true, Menu = require('electron').Menu, windowOptions = {}, universityWindow }) {
+const { installMailSso } = require('./mail-sso');
+function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready = () => true, Menu = require('electron').Menu, windowOptions = {}, universityWindow, mailReport }) {
   // Preserve Chromium's popup options (including its opener), then enforce our
   // session and security preferences. Never replay popup requests with loadURL:
   // doing so drops form POST data and breaks the returned WindowProxy.
@@ -16,14 +17,18 @@ function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show
   prefiller.bind(window.webContents);
   owners.set(window.webContents, prefiller);
   downloads?.track(window);
+  const mail = installMailSso({ contents: window.webContents, ready, report: mailReport });
   universityWindow ??= window;
   installNavigation({ window, Menu, ready, downloads, universityWindow });
   window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   for (const event of ['will-navigate', 'will-redirect', 'will-frame-navigate']) {
     window.webContents.on(event, (details, url) => {
       const target = typeof url === 'string' ? url : details.url;
-      if (!allowedURL(target) && !embeddedNavigationAllowed(details) &&
-          !(event === 'will-frame-navigate' && pdfNavigationAllowed(details))) details.preventDefault();
+      const blocked = !allowedURL(target) && !embeddedNavigationAllowed(details) &&
+          !(event === 'will-frame-navigate' && pdfNavigationAllowed(details));
+      mail.guard(event === 'will-redirect' ? 'REDIRECT' : 'NAVIGATE', target, blocked,
+        event === 'will-navigate' || details.isMainFrame);
+      if (blocked) details.preventDefault();
     });
   }
   window.webContents.on('will-attach-webview', event => event.preventDefault());
@@ -34,7 +39,7 @@ function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show
     // submitting a form. Only a university page may create one.
     if (!ready() || !httpsPage(opener) || !(httpsPage(url) || url === 'about:blank')) return { action: 'deny' };
     return { action: 'allow', createWindow: options => {
-      const popup = createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready, Menu, windowOptions: options, universityWindow });
+      const popup = createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready, Menu, windowOptions: options, universityWindow, mailReport });
       downloads?.expectNavigation(popup.webContents, httpsPage(url) ? url : opener);
       return popup.webContents;
     } };

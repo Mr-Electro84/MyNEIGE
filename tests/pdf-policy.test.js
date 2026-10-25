@@ -57,7 +57,7 @@ test('viewer exceptions reject other extensions, Chrome pages and external reque
 test('request filter allows internal PDF resources without logging them as network domains', () => {
   let listener;
   const domains = [];
-  protectRequests({ webRequest: { onBeforeRequest(callback) { listener = callback; } } }, host => domains.push(host));
+  protectRequests({ webRequest: { onBeforeRequest(callback) { listener = callback; }, onHeadersReceived() {} } }, host => domains.push(host));
   const check = details => { let result; listener(details, value => { result = value; }); return result.cancel; };
   const f = fixture();
   assert(!check({ url: PAGE })); assert(!check(f.index)); assert(!check(f.script));

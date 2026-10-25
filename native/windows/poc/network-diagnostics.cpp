@@ -32,6 +32,20 @@ bool safeRelayDiagnostic(const std::string &line) {
 }
 std::string browserRequestDiagnostic(const std::string &line) {
     const auto words = split(line, ' ');
+    if (words.size() == 6 && words[0] == "UI_MAIL_SSO" && line.size() <= 200) {
+        static const std::set<std::string> events{"OPEN", "REQUEST", "RESPONSE", "TARGET", "NAVIGATE",
+            "REDIRECT", "BLOCK", "FAIL", "COMMIT", "RECOVER"};
+        static const std::set<std::string> protocols{"https", "http", "other"};
+        static const std::set<std::string> hosts{"partage.univ-avignon.fr", "sp.partage.renater.fr",
+            "idp.univ-avignon.fr", "cas.univ-avignon.fr", "webmail.partage.renater.fr", "other"};
+        static const std::set<std::string> methods{"GET", "POST", "OTHER"};
+        if (events.contains(words[1]) && protocols.contains(words[2]) && hosts.contains(words[3]) &&
+            methods.contains(words[4]) && numberField(words[5], "", 599) &&
+            (words[5] == "0" || std::stoul(words[5]) >= 100))
+            return "BROWSER_MAIL_SSO event=" + words[1] + " protocol=" + words[2] + " host=" + words[3] +
+                   " method=" + words[4] + " status=" + words[5];
+        return {};
+    }
     if (words.size() < 3 || line.size() > 360 || !validHost(words[1]))
         return {};
     static const std::set<std::string> types{"mainFrame", "subFrame", "stylesheet", "script", "image", "font",

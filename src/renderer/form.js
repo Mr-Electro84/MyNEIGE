@@ -37,9 +37,15 @@ const messages = Object.freeze({
   CAS_PREFILLED: 'Identifiants CAS préremplis. Cliquez sur « SE CONNECTER » dans la fenêtre universitaire.',
   CAS_MANUAL: 'VPN connecté. Préremplissage CAS indisponible : saisissez vos identifiants directement sur le site.',
   BLOCKED: 'Session arrêtée ou connexion perdue. La navigation est bloquée.',
+  SESSION_EXTENDED: 'Session prolongée : vous disposez de deux heures supplémentaires à partir de maintenant.',
   ERROR: 'La connexion a échoué. Le diagnostic local précise la cause.'
 });
 window.myneige.onState(value => {
+  if (value === 'SESSION_EXPIRED') {
+    document.querySelector('main').hidden = true;
+    document.getElementById('session-ended').hidden = false;
+    document.getElementById('ended-close').focus();
+  }
   state.textContent = messages[value] || 'Vérification de la connexion…';
   const enabled = value === 'AUTH_REQUIRED';
   authReady = enabled;
@@ -75,3 +81,4 @@ document.getElementById('disconnect').addEventListener('click', () => {
   username.value = ''; password.value = '';
   window.myneige.disconnect();
 });
+document.getElementById('ended-close').addEventListener('click', () => window.myneige.disconnect());

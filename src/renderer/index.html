@@ -9,18 +9,25 @@
   <script src="form.js" defer></script>
 </head>
 <body>
+  <section id="session-ended" class="session-panel ended-panel" hidden aria-labelledby="ended-title">
+    <p class="label">MyNEIGE</p>
+    <h1 id="ended-title">Votre session a expiré</h1>
+    <p>La durée de la session est écoulée. La connexion VPN, les pages universitaires et les téléchargements ont été arrêtés.</p>
+    <p>Pour ouvrir une nouvelle session, fermez cette fenêtre puis relancez MyNEIGE. Les modifications non enregistrées dans les sites peuvent être perdues.</p>
+    <button id="ended-close" type="button">Fermer MyNEIGE</button>
+  </section>
   <main>
     <section class="information-panel" aria-labelledby="welcome-title">
       <div class="brand">
         <p class="label">MyNEIGE</p>
         <span class="alpha-badge">Version Alpha</span>
       </div>
-      <h1 id="welcome-title">L'accès aux sites d'AU sans prise de tête</h1>
+      <h1 id="welcome-title">Votre université, simplement</h1>
       <p>Connectez-vous avec vos identifiants VPN/CAS pour accèder aux services universitaires via MyNEIGE.</p>
       <p id="state" role="status" aria-live="polite">Vérification des protections réseau…</p>
       <aside class="disclaimer" aria-labelledby="disclaimer-title">
         <h2 id="disclaimer-title">Une version alpha à utiliser avec discernement</h2>
-        <p>MyNEIGE est un outil expérimental indépendant, fourni en l’état, sans garantie de fonctionnement, de sécurité ou d’exactitude des informations affichées. Son utilisation s’effectue sous votre responsabilité et à vos risques.</p>
+        <p>MyNEIGE est un outil expérimental non affilié à Avignon Université (ou à une de ses composantes), fourni en l’état, sans garantie de fonctionnement, de sécurité ou d’exactitude des informations affichées. Son utilisation s’effectue sous votre responsabilité et à vos risques.</p>
         <p>Dans les limites autorisées par la loi applicable, l’auteur décline toute responsabilité pour les conséquences de son utilisation, notamment une atteinte à la sécurité ou à l’intégrité de votre compte VPN/CAS, une perte, une altération ou une divulgation de données, ou une inexactitude des informations affichées. Vérifiez les informations importantes auprès des services officiels de l’université.</p>
         <p>Cette mention ne limite pas les droits auxquels la loi ne permet pas de renoncer.</p>
       </aside>

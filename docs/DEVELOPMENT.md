@@ -43,8 +43,19 @@ Après `npm ci`, ces commandes utilisent les tests locaux et leurs données fict
 | `npm run test:cas` | Préremplissage CAS dans Electron. |
 | `npm run test:browser` | Navigation, téléchargements, PDF et contenus intégrés dans Electron. |
 | `npm run test:mail` | Parcours SSO Mail/PARTAGE avec réponses TLS locales, sans authentification réelle. |
+| `npm run test:session` | Avertissement local, prolongation et écran de fin de session dans Electron, avec échéance simulée. |
 
 Ces scénarios ciblés ne remplacent pas un test sous confinement WFP ni une recette réseau réelle. La confiance TLS particulière de la fixture Mail reste limitée à la session de test et n’est pas installée dans Windows.
+
+### Durée et fin de session
+
+Le contrôleur utilise une horloge monotone pour une durée de deux heures. Il émet `SESSION_WARNING` une seule fois pendant les cinq dernières minutes. Seul le preload de l’avertissement local peut demander `UI_SESSION_EXTEND` ; le contrôleur n’accepte cette demande que pendant l’avertissement, avant l’échéance et après les contrôles réseau habituels. `SESSION_EXTENDED` confirme un nouveau délai de deux heures, sans reconnexion ni rechargement. Le cycle peut se répéter. L’affichage du compte à rebours n’a aucune autorité sur cette échéance.
+
+`SESSION_EXPIRED` ferme les pages, pop-ups, PDF et téléchargements, coupe les connexions Chromium et efface le stockage de la session en mémoire. Le contrôleur révoque l’accès du navigateur au proxy et arrête les composants réseau ; seul le formulaire local sans réseau reste affiché. Les règles WFP et le job Electron sont conservés jusqu’à sa fermeture. Les résultats de sondes de perte VPN/relais sont `null` dans le bilan de cette sortie normale : ces sondes ne sont pas exécutées pendant l’expiration. Les erreurs réseau et la perte du contrôleur conservent le parcours d’arrêt de sécurité.
+
+Les tests natifs simulent les seuils, plusieurs renouvellements et une reprise tardive après l’échéance. Les tests Node vérifient l’origine des actions et les courses avec l’expiration ; `test:session` utilise de vraies fenêtres Electron et des événements simulés. `browser:test` vérifie aussi l’échange des trames par le pipe natif, le clic depuis le preload local et la fermeture des pages par le point d’entrée réel, sous confinement WFP, sans VPN universitaire. Pour la recette réelle avec `npm start`, vérifier une session de deux heures, l’avertissement depuis un pop-up actif, la continuité d’un formulaire et d’un téléchargement après prolongation, puis l’expiration sans clic. Confirmer la coupure réseau et la fermeture de toutes les pages, le maintien de l’écran local et le nettoyage après sa fermeture. Cette recette longue, les pertes de VPN pendant l’avertissement et la veille restent à qualifier avec un compte universitaire.
+
+Validation locale du 26 octobre 2026 : `npm test` réussi (compilation, 37 tests natifs, coffre DPAPI fictif, inspection du profil et 58 tests Node) ; `npm run test:session` réussi, avec contrôle visuel de l’avertissement et de l’écran final ; `npm run browser:test` réussi, dont `BROWSER_SESSION_TEST renewal=true expiry=true local_screen=true no_real_vpn=true`. `npm start` vérifié jusqu’au formulaire de saisie puis fermé sans authentification universitaire. Ces résultats ne constituent ni un essai VPN de deux heures ni une preuve par capture de l’isolation réseau réelle.
 
 ### Précontrôles avec UAC
 

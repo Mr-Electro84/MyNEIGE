@@ -18,6 +18,28 @@ int selfTest() {
         }
         require(rejected, "Expected rejection did not occur");
     };
+    test("session de deux heures : avertissement unique cinq minutes avant la fin", [] {
+        SessionLifetime session(1000, browserSessionSeconds);
+        require(session.until == 7201000 && !session.warn(6900999), "Incorrect initial duration");
+        require(session.warn(6901000) && session.remainingSeconds(6901000) == 300, "Warning missing");
+        require(!session.warn(6902000) && !session.expired(7200999), "Duplicate or early expiration");
+        require(session.expired(7201000) && session.remainingSeconds(7201000) == 0, "Expiration missing");
+    });
+    test("prolongation uniquement pendant l'avertissement et avant l'échéance", [] {
+        SessionLifetime session(0, browserSessionSeconds);
+        require(!session.extend(1000), "Unsolicited renewal accepted");
+        require(session.warn(6900000) && session.extend(7199999), "Timely renewal refused");
+        require(session.until == 14399999 && !session.warned, "Renewal did not reset two hours");
+        require(!session.extend(7200000), "Duplicate renewal accepted");
+        require(session.warn(14099999) && session.extend(14099999), "Second cycle cannot renew");
+    });
+    test("aucune prolongation ni avertissement après expiration ou réveil tardif", [] {
+        SessionLifetime session(0, browserSessionSeconds);
+        require(session.warn(6900000) && !session.extend(7200000), "Renewal at expiration accepted");
+        require(!session.extend(9000000), "Expired session revived");
+        SessionLifetime asleep(0, browserSessionSeconds);
+        require(!asleep.warn(9000000) && asleep.expired(9000000), "Late wake revived the session");
+    });
     test("SHA256 matches standard empty and abc vectors", [] {
         require(sha256Text("") == "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
                 "Empty SHA256 mismatch");

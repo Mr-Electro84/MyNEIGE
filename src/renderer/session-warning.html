@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; form-action 'none'; frame-src 'none'; base-uri 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyNEIGE · Fin de session</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="session-warning.js" defer></script>
+</head>
+<body>
+  <section class="session-panel">
+    <p class="label">MyNEIGE</p>
+    <h1>Votre session va expirer</h1>
+    <p id="remaining" role="status" aria-live="polite">La session expire dans moins de 5 minutes.</p>
+    <p>Prolongez-la pour continuer votre travail sans interrompre la connexion. À l’échéance, les pages et les téléchargements seront fermés. Enregistrez votre travail.</p>
+    <button id="extend" type="button">Prolonger de deux heures</button>
+    <button id="stop" class="secondary" type="button">Terminer la session</button>
+  </section>
+</body>
+</html>

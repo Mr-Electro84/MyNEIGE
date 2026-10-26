@@ -13,7 +13,9 @@ Lancer MyNEIGE normalement, sans « Exécuter en tant qu’administrateur ». Le
 
 Saisir les identifiants dans le formulaire local. Après validation du tunnel, le navigateur universitaire s’ouvre. Le CAS peut être prérempli ; cliquer soi-même sur « SE CONNECTER ». L’enregistrement des identifiants est facultatif et leur réutilisation nécessite Windows Hello. Les identifiants mémorisés sont liés au compte et au PC, même avec le ZIP portable.
 
-Le menu **Aide → À propos…** affiche la version. Fermer le formulaire met fin à la session, limitée à 30 minutes. L’application est une Alpha : la compatibilité avec la veille, les changements de réseau et les VPN tiers reste à qualifier. Les versions ne se mettent pas à jour automatiquement.
+Le menu **Aide → À propos…** affiche la version. Fermer le formulaire met fin à la session. Les sources actuelles prévoient une session de **deux heures** : cinq minutes avant la fin, un avertissement local propose **Prolonger de deux heures** ou **Terminer la session**. La prolongation ouvre un nouveau délai de deux heures à compter du clic accepté, sans recharger les pages ni reconnecter le VPN. Fermer l’avertissement ne prolonge rien. Sans prolongation, le VPN, toutes les pages et les téléchargements s’arrêtent ; un écran local explique l’expiration et invite à relancer MyNEIGE. Enregistrer son travail avant l’échéance : les saisies non enregistrées peuvent être perdues. Les anciens paquets peuvent encore appliquer la limite de 30 minutes ; ces changements nécessitent un paquet reconstruit.
+
+L’application est une Alpha : la compatibilité avec la veille, les changements de réseau et les VPN tiers reste à qualifier. Les versions ne se mettent pas à jour automatiquement.
 
 ## Vérifications et diagnostics
 

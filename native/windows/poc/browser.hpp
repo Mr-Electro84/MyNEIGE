@@ -6,6 +6,7 @@ struct BrowserPilot {
     Child child;
     Handle channel;
     std::string pending;
+    bool extendRequested = false;
     std::filesystem::path executable, entry, userData, vault;
     void prepare(const Staging &staging, const std::filesystem::path &projectRoot);
     void launch(Firewall &firewall, bool selfTest = false);

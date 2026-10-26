@@ -37,7 +37,7 @@ Consultez le [guide d’utilisation de l’Alpha](docs/ALPHA_TESTER.md) pour l�
 
 ### Limites de cette Alpha
 
-- Les sessions sont limitées à **30 minutes** ; fermer le formulaire MyNEIGE termine la session.
+- Les sessions durent **deux heures**, renouvelables depuis l’avertissement affiché cinq minutes avant la fin. Sans prolongation, les pages et le VPN sont fermés ; un écran local explique la fin de session. Fermer le formulaire MyNEIGE termine aussi la session.
 - Les paquets actuels sont **non signés** et peuvent déclencher une alerte de provenance Windows. Les mises à jour sont manuelles.
 - La compatibilité avec la veille, les changements de réseau et les autres VPN reste à qualifier. La validation sur un PC ou une VM Windows propre reste à compléter avant une diffusion élargie.
 - Aucune version macOS, Linux ou Windows ARM n’est proposée actuellement.

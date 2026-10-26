@@ -541,7 +541,7 @@ int connectSession(const Options &options) {
     if (options.browserMode)
         selectInteractiveUser();
     protectSupervisor();
-    require(options.seconds >= 1 && options.seconds <= (options.browserMode ? 3600u : 60u), "Invalid pilot duration");
+    require(options.seconds >= 1 && options.seconds <= (options.browserMode ? browserSessionSeconds : 60u), "Invalid pilot duration");
     auto mutex = sessionMutex();
     validateOpenVpn(options.openvpn);
     auto config = normalizeProfile(readTextFile(options.profile));
@@ -578,10 +578,7 @@ int connectSession(const Options &options) {
     std::set<std::string> reportedDiagnostics;
     cancelled = false;
     SetConsoleCtrlHandler(consoleHandler, TRUE);
-    auto cleanup = [&] {
-        // Kill/join all emitters before touching route or WFP; persistent WFP is retained if route cleanup fails.
-        if (browser)
-            browser->stop();
+    auto stopNetwork = [&] {
         relay.stop();
         publicRelay.child.stop();
         try {
@@ -596,6 +593,12 @@ int connectSession(const Options &options) {
         management.socket.reset();
         route.remove();
         tap.remove();
+    };
+    auto cleanup = [&] {
+        // Kill/join all emitters before touching route or WFP; persistent WFP is retained if route cleanup fails.
+        if (browser)
+            browser->stop();
+        stopNetwork();
         if (firewall.owns)
             firewall.clear();
         wipe(token);
@@ -855,11 +858,14 @@ int connectSession(const Options &options) {
             std::cout << "OWNED_ROUTE_RESTORED_HTTPS status=" << recoveredStatus << std::endl;
         }
         std::cout << "READY_FOR_CAPTURE duration_seconds=" << options.seconds << ". Ctrl+C stops the session.\n";
-        auto activeUntil = GetTickCount64() + options.seconds * 1000ULL;
+        SessionLifetime lifetime(GetTickCount64(), options.seconds);
+        bool userStopped = false;
         auto nextProbe = GetTickCount64() + 5000;
-        while (!cancelled && GetTickCount64() < activeUntil) {
-            if (browser && browser->wantsStop())
+        while (!cancelled && !lifetime.expired(GetTickCount64())) {
+            if (browser && browser->wantsStop()) {
+                userStopped = true;
                 break;
+            }
             for (unsigned n = 0; n < 64; ++n) {
                 auto output = relay.pollLine();
                 if (output.empty())
@@ -896,6 +902,20 @@ int connectSession(const Options &options) {
                     throw std::runtime_error("Tunnel requires renewed authentication or failed");
                 wipe(line);
             }
+            // Une prolongation n'est acceptée qu'avant l'échéance et après
+            // les contrôles de santé du tunnel ; elle ne reconnecte rien.
+            if (browser) {
+                if (browser->extendRequested) {
+                    browser->extendRequested = false;
+                    if (lifetime.extend(GetTickCount64())) {
+                        browser->send("SESSION_EXTENDED\n");
+                        std::cout << "SESSION_EXTENDED duration_seconds=" << browserSessionSeconds << std::endl;
+                    }
+                }
+                const auto now = GetTickCount64();
+                if (lifetime.warn(now))
+                    browser->send("SESSION_WARNING " + std::to_string(lifetime.remainingSeconds(now)) + "\n");
+            }
             if (!browser && GetTickCount64() >= nextProbe) {
                 auto probeStatus = httpsHead(port, token);
                 require(probeStatus >= 200 && probeStatus < 500 && probeStatus != 407, "Repeated HTTPS probe failed");
@@ -908,36 +928,48 @@ int connectSession(const Options &options) {
             TerminateProcess(GetCurrentProcess(), 86);
             ExitProcess(86);
         }
-        // Controlled tunnel loss. The relay remains quarantined while testing its failure response.
-        if (browser)
-            browser->stop();
-        openvpn.stop();
-        bool blocked = false;
-        try {
-            auto failedStatus = httpsHead(port, token);
-            blocked = failedStatus >= 500;
-        } catch (const std::exception &) {
-            blocked = true;
+        const bool expired = browser && !cancelled && !userStopped && lifetime.expired(GetTickCount64());
+        if (expired) {
+            // Le formulaire local reste confiné pendant l'explication de fin.
+            firewall.revokeBrowserProxy(browser->executable.wstring());
+            browser->send("SESSION_EXPIRED\n");
+            stopNetwork();
+            std::cout << "SESSION_EXPIRED\n";
+            // Garder WFP, le job Electron et le pipe jusqu'à la fermeture du
+            // seul écran local. Une perte du contrôleur conserve l'arrêt forcé.
+            while (!cancelled && !browser->wantsStop()) Sleep(200);
+        } else {
+            // Controlled tunnel loss. The relay remains quarantined while testing its failure response.
+            if (browser) browser->stop();
+            openvpn.stop();
+            bool blocked = false;
+            try {
+                auto failedStatus = httpsHead(port, token);
+                blocked = failedStatus >= 500;
+            } catch (const std::exception &) {
+                blocked = true;
+            }
+            require(blocked, "Request unexpectedly succeeded after tunnel loss");
+            std::cout << "TUNNEL_LOSS_REQUEST_BLOCKED (packet capture still required to prove no physical leakage)\n";
+            relay.stop();
+            blocked = false;
+            try {
+                httpsHead(port, token);
+            } catch (const std::exception &) {
+                blocked = true;
+            }
+            require(blocked, "Request unexpectedly succeeded with stopped relay");
+            std::cout << "RELAY_LOSS_REQUEST_BLOCKED\n";
         }
-        require(blocked, "Request unexpectedly succeeded after tunnel loss");
-        std::cout << "TUNNEL_LOSS_REQUEST_BLOCKED (packet capture still required to prove no physical leakage)\n";
-        relay.stop();
-        blocked = false;
-        try {
-            httpsHead(port, token);
-        } catch (const std::exception &) {
-            blocked = true;
-        }
-        require(blocked, "Request unexpectedly succeeded with stopped relay");
-        std::cout << "RELAY_LOSS_REQUEST_BLOCKED\n";
         success = true;
         cleanup();
         auto restored = NetworkSnapshot::capture();
         verifyNetworkSnapshot(baseline, restored,
                               "Host network restoration differs from baseline; inspect before continuing");
         std::cout << "RESULT "
-                     "{\"live_https\":true,\"proxy_auth\":true,\"tunnel_loss_blocked\":true,\"relay_loss_blocked\":"
-                     "true,\"other_image_tunnel_bind_blocked\":true,\"packet_capture\":\"manual_required\","
+                     "{\"live_https\":true,\"proxy_auth\":true,\"tunnel_loss_blocked\":"
+                  << (expired ? "null" : "true") << ",\"relay_loss_blocked\":" << (expired ? "null" : "true")
+                  << ",\"other_image_tunnel_bind_blocked\":true,\"packet_capture\":\"manual_required\","
                      "\"electron\":\""
                   << (options.browserMode ? "pilot_started" : "not_used")
                   << "\",\"feasibility\":"

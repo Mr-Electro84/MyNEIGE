@@ -343,6 +343,8 @@ bool BrowserPilot::wantsStop() {
         require(line.rfind("UI_ERROR ", 0) != 0, "Browser reported a guarded navigation failure");
         if (line == "UI_STOP")
             return true;
+        if (line == "UI_SESSION_EXTEND")
+            extendRequested = true;
         if (line.rfind("UI_PAGE ", 0) == 0) {
             auto fields = split(line, ' ');
             if (fields.size() == 3 && universityHost(fields[1]) &&
@@ -394,6 +396,13 @@ int browserTest(const std::filesystem::path &projectRoot) {
                 "Browser navigation/download integration tests failed");
         std::cout << "BROWSER_FEATURES_TEST navigation=true downloads=true cookies_preserved=true cancellation=true"
                   << std::endl;
+        browser.send("TEST_SESSION_WARNING\n");
+        require(browser.wait(10000) == "UI_SESSION_EXTEND", "Local session renewal IPC failed");
+        browser.send("SESSION_EXTENDED\nTEST_SESSION_EXTENDED\n");
+        require(browser.wait(10000) == "UI_SESSION_RENEWAL_DONE", "Session renewal closed protected windows");
+        browser.send("SESSION_WARNING 1\nSESSION_EXPIRED\nTEST_SESSION_EXPIRED\n");
+        require(browser.wait(10000) == "UI_SESSION_EXPIRY_DONE", "Session expiry local screen failed");
+        std::cout << "BROWSER_SESSION_TEST renewal=true expiry=true local_screen=true no_real_vpn=true" << std::endl;
         browser.stop();
         firewall.clear();
         std::cout << "RESULT {\"browser_preflight\":true,\"vpn\":\"not_tested\"}" << std::endl;

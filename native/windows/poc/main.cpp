@@ -85,7 +85,7 @@ int wmain(int argc, wchar_t **argv) {
             try {
                 if (command == "distribution-test") return neige::browserTest(options.projectRoot);
                 options.browserMode = true;
-                options.seconds = 1800;
+                options.seconds = neige::browserSessionSeconds;
                 return neige::connectSession(options);
             } catch (const std::exception &error) {
                 if (std::string(error.what()) == "Cancelled in browser") return 0;
@@ -106,7 +106,7 @@ int wmain(int argc, wchar_t **argv) {
             return neige::publicNetworkTest();
         if (command == "browse") {
             options.browserMode = true;
-            options.seconds = 1800;
+            options.seconds = neige::browserSessionSeconds;
             return neige::connectSession(options);
         }
         if (command == "adapter-test")
@@ -137,7 +137,7 @@ int wmain(int argc, wchar_t **argv) {
                      "  myneige-poc browser-test --project-root path\n"
                      "      Admin: Electron quarantine, children, UDP and sandbox; no credentials\n"
                      "  myneige-poc browse --project-root path [--profile path]\n"
-                     "      Admin broker, medium-integrity form and protected browser; 30 minutes maximum\n"
+                     "      Admin broker, medium-integrity form and protected browser; renewable two-hour session\n"
                      "  myneige-poc qualify | qualify-crash [--profile path] [--seconds 1..60]\n"
                      "      Admin: real VPN, owned route loss; second command crashes broker with code 86\n"
                      "  myneige-poc connect [--openvpn path] [--profile path]\n"

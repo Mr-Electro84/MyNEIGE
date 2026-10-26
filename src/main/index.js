@@ -16,6 +16,7 @@ const { NativeVault } = require('./native-vault');
 const { APP_ICON } = require('./app-icon');
 const { helpMenu } = require('./about');
 const { networkErrors, networkError, requestMetadata } = require('./network-diagnostics');
+const { createSessionLifecycle } = require('./session-lifecycle');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
@@ -37,7 +38,7 @@ const formPath = path.join(__dirname, '../renderer/index.html');
 const formURL = pathToFileURL(formPath).href;
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
-let vpnReady = false, downloads;
+let vpnReady = false, downloads, sessionLifecycle;
 let vault, vaultBusy = false, vaultEpoch = 0, rememberPending, rememberTimer;
 function clearRemember() {
   clearTimeout(rememberTimer); rememberTimer = undefined;
@@ -154,6 +155,9 @@ async function control(line) {
     form.webContents.on('will-navigate', event => event.preventDefault());
     form.on('closed', () => { form = null; if (!stopping) { send('UI_STOP'); shutdown(); } });
     await form.loadFile(formPath);
+    sessionLifecycle = createSessionLifecycle({ BrowserWindow, ipcMain, localSession, ready: () => vpnReady && !stopping,
+      send, stop: () => { send('UI_STOP'); shutdown(); }, expired: expireSession,
+      extended: () => state('SESSION_EXTENDED'), show: !testMode });
     await vaultStatus();
     send('BROWSER_STAGE FORM_FILE_LOADED');
     if (testMode) {
@@ -192,6 +196,32 @@ async function control(line) {
       protectedWindow: (browserSession, prefiller, fixtureDownloads, ready) => createProtectedWindow({ BrowserWindow,
         session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, ready, show: false }) });
     send('UI_BROWSER_FEATURES_DONE');
+  } else if (line === 'TEST_SESSION_WARNING' && form && testMode) {
+    for (const window of BrowserWindow.getAllWindows()) if (window !== form) window.destroy();
+    webSession = session.fromPartition(`session-test-${Date.now()}`, { cache: false });
+    webSession.webRequest.onBeforeRequest((_details, callback) => callback({ cancel: true }));
+    vpnReady = true;
+    remote = protectedWindow(); protectedWindow();
+    await sessionLifecycle.warning(300);
+    const notice = BrowserWindow.getAllWindows().find(window => window.getTitle() === 'MyNEIGE · Fin de session');
+    if (!notice) throw new Error('Session warning missing');
+    await notice.webContents.executeJavaScript('document.getElementById("extend").click()');
+  } else if (line === 'TEST_SESSION_EXTENDED' && form && testMode) {
+    if (!vpnReady || remote.isDestroyed() || BrowserWindow.getAllWindows().length !== 3)
+      throw new Error('Session renewal interrupted protected windows');
+    send('UI_SESSION_RENEWAL_DONE');
+  } else if (line === 'TEST_SESSION_EXPIRED' && form && testMode) {
+    if (vpnReady || BrowserWindow.getAllWindows().length !== 1 ||
+        !await form.webContents.executeJavaScript('document.querySelector("main").hidden && !document.getElementById("session-ended").hidden'))
+      throw new Error('Session expiry did not retain only the local screen');
+    send('UI_SESSION_EXPIRY_DONE');
+  } else if (parts[0] === 'SESSION_WARNING' && parts.length === 2 && /^[0-9]{1,3}$/.test(parts[1]) && sessionLifecycle) {
+    // Le chargement de l'avertissement ne retarde jamais une trame d'arrêt.
+    void sessionLifecycle.warning(Number(parts[1])).catch(error => { diagnostic(error); shutdown(true); });
+  } else if (line === 'SESSION_EXTENDED' && sessionLifecycle) {
+    sessionLifecycle.extended();
+  } else if (line === 'SESSION_EXPIRED' && sessionLifecycle) {
+    await sessionLifecycle.expire();
   } else if (line === 'AUTH_REQUIRED' && form) {
     authPending = true; state('AUTH_REQUIRED'); void vaultStatus();
   } else if (parts[0] === 'STATE' && parts.length === 2 && ['BLOCKED', 'ERROR', 'CONNECTING'].includes(parts[1])) {
@@ -297,9 +327,26 @@ function protectedWindow(browserSession = webSession, prefiller = casPrefill) {
     downloads: browserSession === webSession ? downloads : undefined, ready: () => (testMode || vpnReady) && !stopping,
     mailReport: metadata => send(`UI_MAIL_SSO ${metadata}`) });
 }
+async function expireSession() {
+  vpnReady = false; authPending = false; proxySecret = undefined;
+  ++vaultEpoch; clearRemember(); vault?.stop(); casPrefill.clear(); downloads?.stop();
+  // Le formulaire n'utilise qu'une session locale interdisant le réseau.
+  // Détruire aussi les pop-ups et les PDF, pas seulement la fenêtre principale.
+  for (const window of BrowserWindow.getAllWindows()) if (window !== form) window.destroy();
+  if (form && !form.isDestroyed()) {
+    state('SESSION_EXPIRED');
+    if (form.isMinimized()) form.restore();
+    if (!testMode) { form.show(); form.focus(); }
+  }
+  if (webSession) {
+    await webSession.closeAllConnections();
+    await webSession.clearStorageData();
+  }
+}
 function shutdown(failed = false) {
   if (stopping) return;
   stopping = true; authPending = false; proxySecret = undefined;
+  sessionLifecycle?.dispose();
   ++vaultEpoch; clearRemember(); vault?.stop();
   vpnReady = false; casPrefill.clear();
   downloads?.stop();

@@ -1,5 +1,6 @@
 #pragma once
 #include "platform.hpp"
+#include "session-lifetime.hpp"
 namespace neige {
 struct PushOptions {
     std::vector<uint32_t> dns;

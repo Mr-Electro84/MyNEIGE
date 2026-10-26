@@ -10,6 +10,10 @@
   --border: #c5cde9;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.session-panel { max-width: 620px; margin: auto; }
+.session-panel h1 { font-size: 26px; margin-top: 12px; }
+.ended-panel { padding: 28px; border: 1px solid var(--border); border-radius: 18px; background: white; }
 body { margin: 0; padding: 24px; }
 main {
   display: grid;

@@ -4,3 +4,17 @@ dist/
 *.user
 *.suo
 *.pdb
+
+# Fichiers d’environnement susceptibles de contenir des secrets
+.env
+.env.*
+!.env.example
+
+# Certificats personnels pouvant contenir une clé privée
+*.pfx
+*.p12
+
+# Captures réseau susceptibles de contenir des données de session
+*.pcap
+*.pcapng
+*.cap

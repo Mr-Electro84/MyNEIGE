@@ -6,7 +6,7 @@ Le menu Université propose **Mail** (`https://partage.univ-avignon.fr/`) et **N
 
 Toutes les pages HTTPS de `univ-avignon.fr` et de ses sous-domaines peuvent intégrer les lecteurs YouTube standards (`youtube.com/embed/…`) et sans cookies (`youtube-nocookie.com/embed/…`). L'autorisation concerne aussi les lecteurs imbriqués dans une activité H5P universitaire, une iframe `srcdoc` ou une activité distante `*.h5p.com/content/…/embed` / `h5p.org/h5p/embed/…`.
 
-La page principale doit rester universitaire et toute la chaîne des cadres doit être universitaire, un lecteur admis ou un cadre vide intermédiaire. Une frame manquante ou détruite ne donne aucun droit supplémentaire. La navigation principale et les pop-ups vers YouTube/H5P restent refusés ; les pages `/watch`, les interfaces d'administration H5P et les autres services Google ne sont pas ajoutés à la navigation générale.
+La page principale doit rester universitaire et toute la chaîne des cadres doit être universitaire, un lecteur admis ou un cadre vide intermédiaire. Une frame manquante ou détruite ne donne aucun droit supplémentaire. La navigation principale et les pop-ups vers YouTube/H5P restent refusés dans MyNEIGE ; les liens web externes sont délégués au navigateur par défaut selon les [règles des liens externes](J2_NAVIGATION_DOWNLOADS.md#liens-externes). Les pages `/watch`, les interfaces d'administration H5P et les autres services Google ne sont pas ajoutés à la navigation générale de MyNEIGE.
 
 ## Ressources admises
 

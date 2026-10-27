@@ -1,6 +1,6 @@
-# J2 — navigation, téléchargements, logo et avertissement
+# Navigation, téléchargements, logo et avertissement
 
-Extension du pilote Windows autorisée le 23 octobre 2026. Aucun packaging ajouté.
+Ce guide décrit les menus, les liens externes, les téléchargements, la consultation des PDF et les ressources graphiques de l’application. La construction des paquets est décrite dans le [guide de distribution](ALPHA_DISTRIBUTION.md).
 
 ## Navigation
 
@@ -20,9 +20,17 @@ Chaque fenêtre universitaire dispose d’un menu natif Windows :
 | Université → Nextcloud | — | Ouvre `https://cloud.univ-avignon.fr/` dans la fenêtre principale. |
 | Fichiers → Téléchargements | Ctrl + J | Affiche les états récents et permet d’annuler les transferts en cours. |
 
-Précédent/suivant sont désactivés lorsqu’aucune entrée correspondante n’est disponible ou admise. Les contrôles de domaines et le proxy restent ceux de la session ; aucun navigateur externe n’est ouvert. L’accueil conserve les cookies de la session. Le préremplissage CAS reste à usage unique : revenir à une page de connexion ne redélivre pas les identifiants.
+Précédent/suivant sont désactivés lorsqu’aucune entrée correspondante n’est disponible ou admise. Les contrôles de domaines et le proxy restent ceux de la session. L’accueil conserve les cookies de la session. Le préremplissage CAS reste à usage unique : revenir à une page de connexion ne redélivre pas les identifiants.
 
 Le menu Université conserve la fenêtre initialement ouverte sur APPIGS, son historique et sa session ; depuis un pop-up, il cible aussi cette fenêtre principale, sans remplacer le contenu du pop-up. Ses commandes sont désactivées si le VPN n’est pas prêt ou si la fenêtre principale est fermée, et leur exécution revérifie ces conditions. Les services universitaires restent sous tunnel, à l'exception explicite de Mail/PARTAGE ; RENATER et les ressources externes YouTube/H5P autorisées utilisent la connexion habituelle. Le routage et ses limites sont décrits dans [les autorisations de contenus intégrés](EMBEDDED_CONTENT.md). Une session conservée ne garantit pas une authentification automatique sur chaque service ; les redirections CAS et l’accès réel restent à qualifier.
+
+### Liens externes
+
+Depuis une page HTTPS admise, une navigation principale vers un domaine extérieur aux domaines universitaires et RENATER est annulée dans MyNEIGE et son adresse HTTP/HTTPS est transmise au navigateur par défaut avec `shell.openExternal`. Cela couvre les liens dans la fenêtre courante, les liens ouvrant une nouvelle fenêtre (`target="_blank"`, Ctrl+clic, `window.open`) et ceux des pop-ups universitaires. La page MyNEIGE reste affichée. Le navigateur externe utilise ses propres cookies et son réseau habituel ; MyNEIGE ne lui transmet ni session, ni corps POST. Une nouvelle fenêtre demandée par un formulaire POST externe reste refusée, sans conversion en GET.
+
+La délégation exige une session prête et une fenêtre source encore active. Elle n’est jamais déclenchée par le filtre de requêtes : les iframes, scripts, images, téléchargements et redirections HTTP hors politique restent bloqués. Les lecteurs intégrés autorisés conservent leur fonctionnement ; une navigation principale vers YouTube s’ouvre à l’extérieur. Les adresses universitaires ou RENATER refusées (HTTP, port non admis, point final dans le nom d’hôte) restent bloquées dans MyNEIGE sans repli externe, y compris après un échec du VPN ou du relais.
+
+Seules les adresses HTTP/HTTPS externes sans identifiants dans l’URL sont déléguées. Les protocoles locaux ou applicatifs (`file:`, `javascript:`, `data:`, `mailto:`, etc.) restent refusés. Un échec de l’ouverture système affiche un avertissement local sans exposer l’URL ni le détail de l’erreur.
 
 ## Icône Electron
 
@@ -34,7 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-app-icon.ps1
 
 Le formulaire, la fenêtre universitaire et tous les pop-ups reçoivent explicitement cette icône. Le processus définit le nom MyNEIGE et une identité de barre des tâches dédiée. Le contrôleur natif copie également les ressources `assets` en lecture seule dans le staging protégé, avec les mêmes contrôles de liens de réanalyse que le code. Après mise à jour du code natif, reconstruire avec `npm run poc:build` avant de lancer `npm start`.
 
-L’icône de la barre de titre a été vérifiée visuellement sur une page fictive locale ; l’apparence exacte des regroupements/épinglages de la barre des tâches reste à confirmer en recette Windows. Le binaire reste `electron.exe` : son icône intégrée, les raccourcis installés et l’installateur seront traités lors du packaging J3.
+L’icône de la barre de titre a été vérifiée visuellement sur une page fictive locale ; l’apparence exacte des regroupements/épinglages de la barre des tâches reste à confirmer en recette Windows. Le runtime de navigation reste `electron.exe`. Les paquets utilisent un lanceur natif `MyNEIGE.exe` avec icône intégrée ; l’installateur crée les raccourcis. Voir le [guide de distribution](ALPHA_DISTRIBUTION.md).
 
 ## Téléchargements
 
@@ -52,7 +60,7 @@ Les fichiers complètement enregistrés restent au chemin choisi après fermetur
 
 Le diagnostic ne contient que les états `STARTED`, `COMPLETED`, `CANCELLED`, `INTERRUPTED` ou `REFUSED`, sans nom de fichier, chemin, URL ni contenu du document. Les noms sont visibles dans la boîte de suivi locale, pas dans les journaux MyNEIGE.
 
-Les destinations hors politique, HTTP, `file:` et `data:` restent refusées. La gestion des services externes nécessiterait une révision explicite du périmètre.
+Pour les téléchargements dans MyNEIGE, les destinations hors politique, HTTP, `file:` et `data:` restent refusées. L’ouverture des liens web externes décrite ci-dessus n’élargit pas les autorisations de téléchargement de la session.
 
 ## Consultation des PDF
 
@@ -71,6 +79,8 @@ L’encadré « Une version alpha à utiliser avec discernement » indique le ca
 Cette formulation exprime une information et une limitation souhaitée, sans prétendre garantir une exonération juridique absolue. Elle accompagne les sections 7 et 8 de la [licence Apache 2.0 du dépôt](../LICENSE), qui reste inchangée. Aucun écran d’acceptation ni case obligatoire n’a été ajouté.
 
 ## Vérifications
+
+Validation des liens externes du 27 octobre 2026 : `npm run test:js` réussit (61 tests Node), ainsi que `npm run test:browser` (48 vérifications Chromium), `npm run test:cas` (9 cas, aucune soumission automatique), `npm run test:mail` (7 scénarios TLS locaux) et `npm run browser:test` (précontrôle WFP, fixtures navigateur, CAS et durée de session). Les nouveaux scénarios vérifient la délégation unique des liens dans la même fenêtre ou une nouvelle fenêtre, les liens depuis un pop-up, l’échec système avec avertissement sans données privées, et les refus pour ressources, iframes, POST en nouvelle fenêtre, protocoles non web, domaines internes mal formés, redirections et session indisponible. La délégation système est remplacée par un collecteur dans ces tests, y compris sous WFP : aucun vrai navigateur externe n’est lancé. `npm start` a été vérifié jusqu’au formulaire local puis fermé normalement (code 0), sans saisir d’identifiants ni démarrer le VPN universitaire. L’ouverture effective d’un lien dans le navigateur Windows choisi par l’utilisateur, depuis un service réel après connexion, reste à confirmer en recette ; ces tests ne démontrent pas l’isolation réseau réelle sous VPN.
 
 La correction PDF porte le total à 27 vérifications Chromium : les 22 précédentes, consultation directe avec `inline`, consultation sans `Content-Disposition`, iframe, pop-up POST, et refus des navigations principales hors politique. Le PDF de test contient désormais une vraie page ; les tests attendent le chargement réussi du lecteur et vérifient le nombre de pages, l'URL source et l'absence d'accès Node. Une capture locale facultative permet de contrôler visuellement le rendu. Quatre tests Node supplémentaires vérifient les exceptions internes et leurs refus (autres extensions, types de requête, contexte absent/détruit, origine initiatrice et journalisation).
 

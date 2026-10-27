@@ -1,7 +1,32 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { START_URL, allowedURL, validateCredentials } = require('../src/main/policy');
+const { START_URL, allowedURL, externalURL, validateCredentials } = require('../src/main/policy');
+
+test('les liens web externes sont normalisés pour le navigateur par défaut', () => {
+  for (const url of ['https://example.org/cours?q=1#page', 'http://example.org:8080/',
+    'https://www.youtube.com/watch?v=fixture', 'https://univ-avignon.fr.example.org/']) {
+    assert.equal(externalURL(url), new URL(url).href);
+    assert(!allowedURL(url));
+  }
+  assert.equal(externalURL('HTTPS://EXAMPLE.ORG'), 'https://example.org/');
+});
+
+test('aucune adresse universitaire ou RENATER ne devient un repli externe', () => {
+  for (const host of ['univ-avignon.fr', 'cas.univ-avignon.fr', 'renater.fr', 'sp.partage.renater.fr']) {
+    for (const url of [`https://${host}/`, `http://${host}/`, `https://${host}:444/`, `https://${host}./`, `http://${host}../`])
+      assert.equal(externalURL(url), null, url);
+  }
+});
+
+test('les protocoles non web, identifiants URL et adresses invalides restent refusés en externe', () => {
+  for (const value of [null, {}, '', 'not a URL', '//example.org/', 'https://example.org/\n',
+    'https://example.org/ has-space', 'https://u:p@example.org/', 'https://u@example.org/',
+    'https://example.org/' + 'x'.repeat(2081), 'file:///C:/Windows/win.ini',
+    'javascript:alert(1)', 'data:text/html,fixture', 'mailto:fixture@example.org',
+    'ms-settings:defaultapps', 'ftp://example.org/', 'wss://example.org/', 'about:blank'])
+    assert.equal(externalURL(value), null, String(value));
+});
 test('university HTTPS and WSS are admitted', () => {
   for (const url of [START_URL, 'https://univ-avignon.fr/', 'https://cas.univ-avignon.fr/cas/login?service=test', 'wss://ent.univ-avignon.fr/socket']) assert(allowedURL(url));
 });

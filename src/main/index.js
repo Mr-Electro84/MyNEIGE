@@ -193,8 +193,8 @@ async function control(line) {
     send('UI_VAULT_TEST_DONE');
   } else if (line === 'TEST_BROWSER_FEATURES' && form && testMode) {
     await require('./browser-features-test').run({ session, CasPrefill, directory: path.join(app.getPath('userData'), 'download-fixtures'),
-      protectedWindow: (browserSession, prefiller, fixtureDownloads, ready) => createProtectedWindow({ BrowserWindow,
-        session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, ready, show: false }) });
+      protectedWindow: (browserSession, prefiller, fixtureDownloads, ready, openExternal) => createProtectedWindow({ BrowserWindow,
+        session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, ready, openExternal, show: false }) });
     send('UI_BROWSER_FEATURES_DONE');
   } else if (line === 'TEST_SESSION_WARNING' && form && testMode) {
     for (const window of BrowserWindow.getAllWindows()) if (window !== form) window.destroy();

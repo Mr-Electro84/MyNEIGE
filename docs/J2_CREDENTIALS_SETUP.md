@@ -1,6 +1,6 @@
-# J2 — identifiants Windows et préparation d’OpenVPN
+# Identifiants Windows et préparation d’OpenVPN
 
-23 octobre 2026. Extension autorisée après le [rapport de faisabilité](J2_CREDENTIALS_OPENVPN_FEASIBILITY.md). Interface pilote, sans packaging.
+Ce guide décrit l’enregistrement facultatif des identifiants, leur réutilisation après vérification Windows Hello et la préparation d’OpenVPN. Les commandes ci-dessous concernent le développement ; les points d’entrée des paquets sont décrits dans le [guide utilisateur](ALPHA_TESTER.md).
 
 ## Utilisation
 

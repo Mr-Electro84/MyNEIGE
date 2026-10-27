@@ -43,7 +43,7 @@ Ces priorités s’appliquent dans le respect des garanties de sécurité et d�
 
 ## Documentation de référence
 
-- `README.md` est la référence pour l’état actuel du projet, son utilisation et ses points d’entrée. En cas de divergence avec `PLAN.md`, le README prime.
+- `README.md` est la référence pour l’état actuel du projet, son utilisation et ses points d’entrée.
 - Utiliser les documents spécialisés de `docs/` pour les détails d’architecture, les procédures et les résultats de recette.
-- `PLAN.md` est un document de planification transitoire, appelé à disparaître progressivement à mesure que le projet se concrétise. Ne pas traiter ses anciennes mentions comme une description certaine de l’état actuel.
-- Maintenir les informations durables utiles dans le README ou la documentation spécialisée lorsqu’une demande nécessite leur mise à jour. La suppression de `PLAN.md` n’est pas demandée par ces consignes.
+- Organiser la documentation par fonctionnalité, procédure et scénario de validation.
+- Maintenir les informations durables utiles dans le README ou la documentation spécialisée lorsqu’une demande nécessite leur mise à jour.

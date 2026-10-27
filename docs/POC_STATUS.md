@@ -1,6 +1,6 @@
 # État de validation du pilote Windows
 
-23 octobre 2026. Les essais de l’agent concernent la machine de développement et les scénarios effectivement exécutés ; les retours utilisateur d’un autre poste sont identifiés séparément. J1 dispose maintenant de captures et d’une décision d’architecture ; sa recette complète reste ouverte. J2 a commencé, sans interface finale ni packaging.
+Rapport des essais réseau et navigateur du 23 octobre 2026 et des retours de recette associés. Les essais de l’agent concernent la machine de développement et les scénarios effectivement exécutés ; les retours utilisateur d’un autre poste sont identifiés séparément. Les captures soutiennent les choix d’architecture, mais la qualification complète reste ouverte. Ce rapport conserve les résultats historiques : le [README](../README.md) décrit l’application actuelle et le [guide de distribution](ALPHA_DISTRIBUTION.md) les validations propres aux paquets.
 
 ## Résultats acquis
 
@@ -14,7 +14,7 @@
 - Relais et Electron de niveau moyen, non administrateurs ; image non modifiable et contrôleur non terminable par la sonde restreinte.
 - Précontrôle Electron réel : TCP IPv4/IPv6 refusé, UDP absent de récepteurs positivement testés, enfant confiné, renderer sans Node et permis proxy seul.
 
-## Captures J1
+## Captures réseau en mode console
 
 Preuves dans `.local/j1/`, exclu de Git. Ne pas publier sans examen. Pktmon capture au plus 96 octets par paquet, avec filtres DNS/443/STUN/ICMP ; les ports éphémères management/proxy ne sont pas sélectionnés. Les exports sont associés aux GUID des Miniport, sans prendre les filtres NDIS pour des cartes physiques. Les trames Wi-Fi natives mal étiquetées Ethernet par l’export sont décodées explicitement.
 
@@ -30,43 +30,48 @@ L’analyse exige des contrôles positifs web, DNS, transport VPN et témoin pen
 
 ## Matrice de recette
 
-| ID | État au 23 octobre |
-| --- | --- |
-| R1 | HEAD APPIGS et certificat réussis, chemin TAP capturé, zéro sortie directe correspondante identifiée. Navigation complète distincte. |
-| R2 | Réussi pendant le scénario stable 30 s : `curl` simultané physique, aucun paquet témoin sur TAP. |
-| R3 | Comparaisons natives pendant la session et routes/DNS avant/après réussies. Le code ne configure aucun proxy système ; recette de toutes les applications tierces non exhaustive. |
-| R4 | UDP et TCP réels liés et capturés sur TAP ; TCP forcé pour l’essai, sans troncature naturelle provoquée sur le DNS réel. |
-| R5 | Arrêt réel OpenVPN et perte/restauration de la route propre : blocage observé/capturé. Transfert volumineux prolongé non testé. |
-| R6 | Arrêt relais et crash contrôleur exécutés ; enfants morts, récupération et fermeture du port vérifiées. Crash Electron à chaque étape encore à couvrir. |
-| R7 | Partiel : perte de route propre testée. Changement physique de réseau, veille et VPN tiers non exécutés. |
-| R8 | Blocage réel TCP IPv4/IPv6 et UDP, enfant Electron, contrôles positifs. API WebRTC/HTTP3 et scénarios média à compléter ; IPv6 hôte conservé. |
-| R9 | Proxy sans secret refusé ; management secret/PID, pipe Electron authentifié par PID. Campagne adverse exhaustive du pipe à compléter. |
-| R10 | GUID renouvelés entre sessions, anciens enfants/ports fermés ; IP VPN différentes observées entre recettes. Changement effectif des DNS et reprise interactive complète non qualifiés. |
-| R11 | Parseurs/classement d’erreurs testés avec données fictives ; pas de campagne réelle de mauvais mots de passe/MFA ni de contournement TLS. |
-| R12 | VPN réel, préremplissage des deux champs CAS et accès APPIGS après clic manuel confirmés par l’utilisateur. Popups, challenges/MFA et captures du parcours navigateur à compléter. |
-| R13/R14 | Crash contrôleur et récupération propres acquis ; autres étapes, concurrence et reprise à compléter. |
-| R15 | Différé avec packaging J3. |
-| R16 | Aucun fichier/argument de credentials ni trace management brute volontairement produit. Caches Chromium sous `.local/` ; aucune garantie d’effacement de toutes les copies mémoire/OS. |
+Les identifiants R1 à R16 désignent des scénarios de validation, indépendamment de l’organisation du développement. Les résultats ci-dessous conservent la portée des essais du 23 octobre 2026 ; les évolutions ultérieures et les essais des paquets sont documentés dans les guides spécialisés. Une réussite sur une machine ne vaut pas qualification générale.
 
-## Début de J2
+Pour chaque recette réseau réelle, relever les routes IPv4/IPv6, DNS, interfaces, règles MyNEIGE et processus avant, pendant et après la session. Capturer simultanément les interfaces physique et VPN ; minimiser et nettoyer les captures avant partage. La résolution initiale du serveur VPN est un trafic d’amorçage distinct. Les destinations publiques explicitement autorisées suivent les [règles de routage actuelles](EMBEDDED_CONTENT.md#routage-explicite-approuvé-le-25-octobre-2026) ; elles ne constituent jamais un secours pour une destination protégée.
 
-Formulaire local, bridge limité, pipe authentifié par PID et session web séparée implémentés. Les images Electron sont copiées dans un répertoire de session protégé ; la quarantaine précède le démarrage de l’arbre de processus. Le preload isolé CAS de l’extension J2 n’expose aucune API au site ; sandbox, isolation de contexte et TLS restent actifs. Le seul permis réseau est le proxy TCP local de la session avec secret éphémère.
+| ID | Scénario et critères | Résultats et limites |
+| --- | --- | --- |
+| R1 | Connexion et accès APPIGS : serveur vérifié, web protégé dans le tunnel, aucune sortie directe correspondante. | HEAD APPIGS et certificat réussis, chemin TAP capturé, zéro sortie directe correspondante identifiée. Navigation complète distincte. |
+| R2 | Application tierce vers la même destination simultanément : chemin habituel conservé ; une comparaison d’IP publique seule ne suffit pas. | Réussi pendant le scénario stable 30 s : `curl` simultané physique, aucun paquet témoin sur TAP. |
+| R3 | Applications et DNS hôte : routes effectives, résolveurs et proxy système conservés. | Comparaisons natives pendant la session et routes/DNS avant/après réussies. Le code ne configure aucun proxy système ; recette de toutes les applications tierces non exhaustive. |
+| R4 | DNS applicatif non en cache : destinations protégées résolues uniquement dans le tunnel, en UDP et TCP. | UDP et TCP réels liés et capturés sur TAP ; TCP forcé pour l’essai, sans troncature naturelle provoquée sur le DNS réel. |
+| R5 | Coupure VPN/arrêt OpenVPN pendant transfert : flux fermés, nouvelles requêtes bloquées, aucune sortie web/DNS protégée sur le réseau physique. | Arrêt réel OpenVPN et perte/restauration de la route propre : blocage observé/capturé. Transfert volumineux prolongé non testé. |
+| R6 | Crash relais/contrôleur : navigation bloquée, aucun processus survivant libéré vers Internet. | Arrêt relais et crash contrôleur exécutés ; enfants morts, récupération et fermeture du port vérifiées. Crash Electron à chaque étape encore à couvrir. |
+| R7 | Changement réseau, perte de route physique, veille et VPN tiers : aucun détournement des autres applications ni fuite MyNEIGE. | Partiel : perte de route propre testée. Changement physique de réseau, veille et VPN tiers non exécutés. |
+| R8 | IPv6, WebRTC, HTTP/3/QUIC : prise en charge protégée prouvée ou blocage applicatif, sans désactiver IPv6 hôte. | Blocage réel TCP IPv4/IPv6 et UDP, enfant Electron, contrôles positifs. API WebRTC/HTTP3 et scénarios média à compléter ; IPv6 hôte conservé. |
+| R9 | Client tiers du proxy/management : refus sans identité/secret de session. | Proxy sans secret refusé ; management secret/PID, pipe Electron authentifié par PID. Campagne adverse exhaustive du pipe à compléter. |
+| R10 | Nouvelle session avec nouvelle IP/interface/DNS : anciens flux et caches invalidés, validation avant reprise. | GUID renouvelés entre sessions, anciens enfants/ports fermés ; IP VPN différentes observées entre recettes. Changement effectif des DNS et reprise interactive complète non qualifiés. |
+| R11 | Refus d’identifiants, crypto/TLS invalides, serveur absent : erreurs distinctes, délais bornés, annulation et aucun contournement TLS. | Parseurs/classement d’erreurs testés avec données fictives ; pas de campagne réelle de mauvais mots de passe/MFA ni de contournement TLS. |
+| R12 | ENT/CAS, popups et challenge : parcours protégé et limites documentés, clic de connexion CAS manuel. | VPN réel, préremplissage des deux champs CAS et accès APPIGS après clic manuel confirmés par l’utilisateur. Popups, challenges/MFA et captures du parcours navigateur à compléter. |
+| R13 | Fermeture et crash forcé à chaque étape : pas de VPN orphelin actif ni relais accessible ; nettoyage et récupération de l’état hôte. | Crash contrôleur et récupération propres acquis ; autres étapes à compléter. |
+| R14 | Double instance et reprise après crash : propriété des ressources respectée ; aucun VPN tiers arrêté ou reconfiguré. | Récupération après crash contrôleur acquise ; concurrence et reprise complète à compléter. |
+| R15 | Installation/désinstallation sur machine propre : prérequis et chemins corrects, seules les ressources MyNEIGE sont retirées. | Non exécuté sur machine propre lors de ces essais. Les validations ultérieures des paquets et leurs limites sont dans le [guide de distribution](ALPHA_DISTRIBUTION.md). |
+| R16 | Fichiers, arguments, journaux et caches : aucun secret en clair volontairement persisté, aucune trace management brute ; enregistrement facultatif limité au coffre protégé prévu. | Aucun fichier/argument de credentials ni trace management brute volontairement produit par le parcours VPN de ces essais. Le coffre DPAPI est décrit plus bas. Caches Chromium sous `.local/` ; aucune garantie d’effacement de toutes les copies mémoire/OS. |
+
+## Premiers essais du formulaire et du navigateur
+
+Formulaire local, bridge limité, pipe authentifié par PID et session web séparée implémentés. Les images Electron sont copiées dans un répertoire de session protégé ; la quarantaine précède le démarrage de l’arbre de processus. Le preload isolé de préremplissage CAS n’expose aucune API au site ; sandbox, isolation de contexte et TLS restent actifs. Le seul permis réseau est le proxy TCP local de la session avec secret éphémère.
 
 L’essai local complet passe : réponse `407`, authentification du proxy et début TLS réellement reçus, puis fermeture volontaire du transport sans serveur distant. Il couvre une correction nécessaire : la règle de résolution Chromium doit exclure l’adresse numérique du proxy `127.0.0.1`, sans ajouter de permis WFP.
 
 L’essai réel via formulaire établit le VPN et obtient le HEAD HTTPS `302`, puis charge CAS : `BROWSER_PAGE host=cas.univ-avignon.fr status=200`. L’utilisateur confirme que la page CAS est affichée et indique n’avoir pas testé la connexion ENT. Un statut APPIGS `200` est également observé dans les diagnostics, mais il ne démontre pas à lui seul un parcours authentifié : aucune page étudiante ni donnée de compte n’a été inspectée. Domaines observés : `www.appigs.univ-avignon.fr`, `cas.univ-avignon.fr` ; navigation/ressources annexes : `dosi.univ-avignon.fr`, `services.univ-avignon.fr` (une réponse `404`) et `stats-web2.univ-avignon.fr`. Leur nécessité pour le parcours authentifié n’est pas établie.
 
-Fermeture réelle du formulaire : processus arrêtés, requêtes après perte VPN puis relais bloquées, nettoyage et comparaison finale du réseau réussis, sortie `0`. Diagnostics : `.local/browser/live-session.txt`, `.local/browser/exit-code.txt`. Le précontrôle local complet est dans `.local/poc/browser-test.txt`. Les captures J1 ci-dessus concernent le mode console ; une capture complète du parcours navigateur/CAS reste à acquérir.
+Fermeture réelle du formulaire : processus arrêtés, requêtes après perte VPN puis relais bloquées, nettoyage et comparaison finale du réseau réussis, sortie `0`. Diagnostics : `.local/browser/live-session.txt`, `.local/browser/exit-code.txt`. Le précontrôle local complet est dans `.local/poc/browser-test.txt`. Les captures réseau ci-dessus concernent le mode console ; une capture complète du parcours navigateur/CAS reste à acquérir.
 
-La politique provisoire de navigation admet HTTPS/WSS 443 pour `univ-avignon.fr` et ses sous-domaines. Les domaines exacts du parcours doivent être identifiés avant resserrement. Permissions et ouvertures externes refusées ; téléchargements admis dans la même session après contrôle de provenance et redirections. Le préremplissage autorisé en J2 est plus strict : origine CAS exacte et service APPIGS uniquement ; le clic reste manuel.
+Lors de ces essais, la politique de navigation admettait HTTPS/WSS 443 pour `univ-avignon.fr` et ses sous-domaines. Les permissions et ouvertures externes étaient refusées ; les téléchargements étaient admis dans la même session après contrôle de provenance et redirections. Les règles actuelles, dont la délégation des liens externes, sont décrites dans le [guide de navigation](J2_NAVIGATION_DOWNLOADS.md) et les [règles de routage](EMBEDDED_CONTENT.md). Le préremplissage CAS reste limité à l’origine CAS exacte et au service APPIGS ; le clic reste manuel.
 
-### Extension J2 — préremplissage CAS
+### Préremplissage CAS
 
 Implémentation et contrat dans [CAS_PREFILL.md](CAS_PREFILL.md). Les cinq tests Node supplémentaires passent. Neuf scénarios Chromium passent avec les mêmes fenêtres, preload et gestion IPC que le pilote réel : remplissage et caractères spéciaux, conservation des champs cachés/cookies, zéro soumission automatique, renderer sans Node/bridge, refus d’autres origines/services/actions, de saisies existantes, de doublons, d’un état de flux absent et des sous-cadres, annulation et non-réutilisation après rechargement. Exécutés via `browser:test` sous WFP (sortie 0), puis via le lanceur sans UAC `test:cas` (sortie 0). Aucun compte réel utilisé par ces tests ; aucun jeton du HTML utilisateur copié dans les fixtures.
 
 L’essai réel atteint CAS `200`, produit `BROWSER_CAS_PREFILL status=PREFILLED`, puis APPIGS `200`. Le contenu des champs n’est pas lu par le diagnostic. L’utilisateur confirme explicitement les deux champs préremplis et l’accès APPIGS après son clic sur « SE CONNECTER ». Le parcours normal VPN → CAS prérempli → clic manuel → APPIGS est donc acquis sur cette machine. Fermeture réelle : pertes VPN/relais bloquées, nettoyage et comparaison réseau réussis, sortie `0`. Les diagnostics locaux sont `.local/browser/live-session.txt` et `.local/browser/exit-code.txt` ; le profil source reste inchangé.
 
-### Extension J2 — menus, fichiers et avertissement
+### Menus, fichiers et avertissement
 
 [Contrat et mode d’emploi](J2_NAVIGATION_DOWNLOADS.md). Menu natif Précédent/Suivant/Accueil APPIGS, raccourcis et suivi des téléchargements ajoutés aux fenêtres protégées. Sauvegarde par Chromium avec destination choisie ; prise en charge HTTPS et `blob` de même origine, contrôle des redirections et noms proposés, annulation sur fermeture/blocage, aucune ouverture automatique. L’avertissement de connexion est affiché avant les champs et a été vérifié visuellement sans identifiants.
 
@@ -76,7 +81,7 @@ La recette réelle confirme le fonctionnement des menus et l’enregistrement d�
 
 Le premier essai avait révélé l’échec des exports en pop-up : le contrôleur recréait ces fenêtres avec `loadURL`, ce qui perdait les POST et le lien avec la page d’origine. La correction conserve la création native Chromium tout en appliquant la session et les protections du pilote. Les cinq scénarios de pop-up ajoutés couvrent cette régression. Cette première session avait été fermée proprement (sortie 0).
 
-### Extension J2 — identifiants Windows et préparation d’OpenVPN
+### Identifiants Windows et préparation d’OpenVPN
 
 [Fonctionnement et limites](J2_CREDENTIALS_SETUP.md). Enregistrement facultatif des identifiants après connexion VPN confirmée, protection DPAPI en portée utilisateur, lecture précédée d’une vérification native Windows Hello, suppression sans déverrouillage et commande indépendante `credentials:forget`. Auxiliaire natif protégé en écriture et sans permis réseau ; opérations réservées au formulaire local.
 
@@ -102,11 +107,11 @@ Correction : protocole explicite de compatibilité scripts/pilote, vérifié ava
 
 Validation locale : compilation MSVC réussie, 48 contrôles de préparation sous Windows PowerShell 5.1, 27 tests natifs et 26 tests Node réussis. Les scénarios d’ancien pilote/reconstruction/échec de compilation sont simulés ; le protocole du nouveau binaire et le refus d’un fichier fictif non signé sont exercés réellement. Le diagnostic de l’installation existante renvoie `Ready`, `OPENVPN_COMPATIBLE` et le paquet TAP présent. Aucun MSI ni VPN lancé pour cette validation. La confirmation après mise à jour et recompilation sur le second PC reste attendue.
 
-### Extension J2 — menu Université et logo Electron
+### Premiers liens du menu Université et logo Electron
 
-Le GO utilisateur couvre les cinq liens universitaires et l’association du logo fourni aux fenêtres Electron. Le menu Université charge les adresses exactes ENT, Annuaire (VPN), Gestionnaire de projets (VPN), E-UAPV/Moodle et EDT dans le WebContents principal initialement ouvert sur APPIGS, y compris lorsqu’il est déclenché depuis un pop-up. Cookies, historique, session et protections sont conservés. Les mentions VPN sont informatives ; aucun accès direct ni élargissement des domaines autorisés n’a été introduit.
+Cette recette porte sur les cinq premiers liens universitaires et l’association du logo fourni aux fenêtres Electron. Le menu Université charge les adresses exactes ENT, Annuaire (VPN), Gestionnaire de projets (VPN), E-UAPV/Moodle et EDT dans le WebContents principal initialement ouvert sur APPIGS, y compris lorsqu’il est déclenché depuis un pop-up. Cookies, historique, session et protections sont conservés. Les mentions VPN sont informatives ; aucun accès direct ni élargissement des domaines autorisés n’a été introduit.
 
-Icône Windows multi-résolution générée depuis le PNG source, script reproductible fourni et icône appliquée au formulaire et aux fenêtres protégées. Les ressources sont copiées dans le staging natif protégé en lecture seule. Nom applicatif et identité de barre des tâches définis ; aucun packaging ni modification des ressources intégrées de `electron.exe`.
+Icône Windows multi-résolution générée depuis le PNG source, script reproductible fourni et icône appliquée au formulaire et aux fenêtres protégées. Les ressources sont copiées dans le staging natif protégé en lecture seule. Nom applicatif et identité de barre des tâches définis. Ces essais ne portaient pas sur les paquets distribués et ne modifiaient pas les ressources intégrées de `electron.exe` ; les validations ultérieures du lanceur natif et de l’installateur sont décrites dans le [guide de distribution](ALPHA_DISTRIBUTION.md).
 
 Validation du 23 octobre 2026 : compilation MSVC, 27 tests natifs, 26 tests Node et test DPAPI avec données fictives réussis (`npm test`, sortie 0). Neuf scénarios CAS sans soumission automatique et 22 vérifications Chromium réussis (`test:cas` et `test:browser`, sorties 0). Les dix ajouts Chromium contrôlent l’icône lisible, les cinq destinations exactes dans le même WebContents/session, l’historique entre services, le refus sans VPN, le ciblage du principal depuis un pop-up et le refus après sa fermeture. Précontrôle `browser:test` également réussi sous WFP (sortie 0), en utilisant les ressources et le code copiés par le contrôleur natif ; aucune connexion VPN ni compte universitaire utilisés.
 
@@ -119,12 +124,12 @@ La première exécution des tests dans le bac à sable de l’agent empêchait l
 - MSI vérifié SHA-256 : `1EA61A3056905B90607D4B0F084C04E5CF3043E07CF192D9CD44B0474F29CC49`.
 - Profil source inchangé SHA-256 : `69869F29FBFE23A7A583C304065ACAB39A2189B5756EEFD7F27BCC1D5BC2DE2E`.
 
-## Décision et suite
+## Portée et limites de la validation
 
-Poursuivre le modèle natif, conformément à la [décision d’architecture](ARCHITECTURE_WINDOWS.md). Les captures contrôlées soutiennent sa faisabilité sur cette machine. **J1 n’est pas déclaré entièrement clos** tant que ses scénarios critiques ouverts ne sont pas exécutés ou que leur exclusion n’est pas décidée explicitement. Le nouveau GO autorise le début expérimental de J2 ; interface finale, packaging et Linux restent différés.
+Les captures contrôlées soutiennent le modèle natif décrit dans l’[architecture Windows](ARCHITECTURE_WINDOWS.md) sur cette machine. **La qualification réseau complète reste ouverte** tant que les scénarios critiques restants ne sont pas exécutés ou que leur exclusion n’est pas décidée explicitement. L’existence de l’interface et des paquets distribués ne remplace pas ces essais.
 
-### Recette restante avant clôture complète de J1
+### Recette réseau restante
 
 Sur une machine disponible pour interrompre son réseau, répéter les relevés/captures physique et TAP avant, pendant et après chaque cas : changement Wi-Fi/Ethernet, disparition de la route physique, veille/reprise, puis coexistence avec un VPN tiers réellement configuré. Vérifier un témoin ordinaire vers la même destination et des requêtes DNS UDP/TCP neuves. Critères : blocage MyNEIGE avant toute sortie directe, aucune utilisation du TAP par le témoin, aucune modification persistante des paramètres étrangers, reprise uniquement après une nouvelle session validée. Un échec de disponibilité du témoin imposé par le changement physique doit être distingué d’un détournement de son trafic.
 
-Ces manipulations n’ont pas été exécutées sur le poste courant ; aucun succès ne leur est attribué. Compléter aussi R10 avec paramètres DNS réellement différents et, en J2, le parcours ENT manuel avec captures, popups et refus de destinations hors politique. Un VPN tiers et un réseau de remplacement doivent être disponibles pour ces essais ; le pilote ne les crée ni ne les configure à la place de l’utilisateur.
+Ces manipulations n’ont pas été exécutées sur le poste courant ; aucun succès ne leur est attribué. Compléter aussi R10 avec paramètres DNS réellement différents et le parcours ENT manuel avec captures, popups et refus de destinations hors politique. Un VPN tiers et un réseau de remplacement doivent être disponibles pour ces essais ; le pilote ne les crée ni ne les configure à la place de l’utilisateur.

@@ -1,4 +1,4 @@
-# MyNEIGE — Votre université, simplement
+# MyNEIGE - Votre université, simplement
 
 MyNEIGE rassemble les services de l’Université d’Avignon dans une application Windows : **APPIGS, ENT, Moodle, emploi du temps, Mail, Nextcloud, annuaire et gestionnaire de projets**.
 
@@ -12,6 +12,7 @@ L’application démarre le VPN universitaire et facilite la connexion aux servi
 - **Vos services réunis** : le menu Université permet de passer d’un service à l’autre dans la même session.
 - **Windows Hello, si vous le souhaitez** : enregistrez vos identifiants, chiffrés localement par Windows, puis réutilisez-les après vérification par Windows Hello. La saisie manuelle reste disponible et l’enregistrement peut être supprimé à tout moment.
 - **Une navigation pratique** : précédent, suivant, retour à APPIGS, consultation des PDF et téléchargements avec choix de destination, suivi et annulation.
+- **Les liens externes dans votre navigateur** : les liens HTTP/HTTPS vers les domaines hors de la liste de navigation MyNEIGE s’ouvrent dans votre navigateur par défaut, avec sa connexion et sa session habituelles.
 - **Les contenus de cours intégrés** : prise en charge des lecteurs YouTube autorisés, y compris dans les activités H5P.
 
 ### Comment fonctionne le VPN ?
@@ -31,7 +32,7 @@ Si vous disposez d’un paquet MyNEIGE fourni par le développeur :
 3. Saisissez vos identifiants universitaires, ou réutilisez ceux enregistrés avec Windows Hello.
 4. Une fois le VPN prêt, confirmez la connexion sur la page universitaire préremplie, puis utilisez le menu Université.
 
-Les paquets prêts à l’emploi ne nécessitent ni Node.js ni outils de compilation. Ils ne sont pas inclus dans un clone du dépôt. Le [site de présentation](website/index.html) présente les formats proposés ; ses liens de téléchargement nécessitent un hébergement avec les paquets correspondants.
+Les paquets prêts à l’emploi ne nécessitent ni Node.js ni outils de compilation. Ils ne sont pas inclus dans un clone du dépôt. Le [site de présentation](https://my-neige.42web.io/) présente les formats proposés ; ses liens de téléchargement nécessitent un hébergement avec les paquets correspondants.
 
 Consultez le [guide d’utilisation de l’Alpha](docs/ALPHA_TESTER.md) pour l’installation, les diagnostics, les mises à jour et la désinstallation.
 
@@ -95,13 +96,16 @@ L’interface repose sur **Electron et JavaScript**, et le contrôle du VPN et d
 | `scripts/` | Compilation, lancement, tests et préparation des distributions. |
 | `tests/` | Tests automatisés et données fictives. |
 | `docs/` | Guides techniques, architecture et rapports de validation. |
-| `website/` | Site de présentation statique et ressources associées. |
 
 Pour commencer, consultez le [guide de développement](docs/DEVELOPMENT.md) et les [consignes du projet](AGENTS.md). Les priorités sont la stabilité, les performances, puis l’amélioration progressive de l’interface. Les commentaires et la documentation sont principalement en français. Discutez avec le mainteneur avant d’engager une modification d’envergure.
 
 Vous pouvez [signaler un problème ou proposer une amélioration](https://github.com/Mr-Electro84/MyNEIGE/issues). Indiquez votre version de Windows, la version de MyNEIGE, les étapes de reproduction et le résultat attendu. Ne publiez jamais de mot de passe, de cookie de session ou de données personnelles ; relisez les diagnostics avant de les partager.
 
-Pour travailler uniquement sur le site, consultez son [guide de prévisualisation et d’hébergement](website/README.md). Les informations de construction des paquets sont regroupées dans le [guide de distribution](docs/ALPHA_DISTRIBUTION.md).
+Les informations de construction des paquets sont regroupées dans le [guide de distribution](docs/ALPHA_DISTRIBUTION.md).
+
+## Utilisation de l'IA
+
+Le développement du projet repose sur une (forte) utilisation de l'IA, notamment l'agent OpenAI Codex notamment pour la génération du code du projet et la validation technique théorique des fonctionnalités.
 
 ## Licence
 

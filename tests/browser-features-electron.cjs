@@ -13,7 +13,7 @@ const owners = new WeakMap(); registerCasIPC(ipcMain, owners);
 const timer = setTimeout(() => { console.error('BROWSER_FEATURES_TEST timeout'); app.exit(1); }, 30000);
 app.whenReady().then(() => run({ session, CasPrefill,
   directory: path.resolve(__dirname, '../.local/download-fixtures'),
-  protectedWindow: (session, prefiller, downloads, ready) => createProtectedWindow({ BrowserWindow, session, prefiller, owners, downloads, ready, show: false })
+  protectedWindow: (session, prefiller, downloads, ready, openExternal) => createProtectedWindow({ BrowserWindow, session, prefiller, owners, downloads, ready, openExternal, show: false })
 })).then(checks => {
   clearTimeout(timer); console.log(`BROWSER_FEATURES_TEST passed checks=${checks}`); app.exit(0);
 }).catch(error => {

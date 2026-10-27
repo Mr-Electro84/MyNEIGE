@@ -90,7 +90,7 @@ async function runEmbeddedTests({ window, directory }) {
     ++checks;
   }
   try { fs.writeFileSync(path.join(directory, 'embedded-video-preview.png'), (await window.webContents.capturePage()).toPNG()); } catch { /* Aperçu facultatif. */ }
-  // Le lecteur reste une iframe : il ne peut ni remplacer la page ni ouvrir YouTube.
+  // Le lecteur reste une iframe : aucune navigation ni fenêtre YouTube dans MyNEIGE.
   const topURL = window.webContents.getURL();
   const frame = window.webContents.mainFrame.framesInSubtree.find(frame => frame.url.includes('/embed/fixture'));
   if (!await frame.executeJavaScript(`window.open('https://www.youtube.com/watch?v=fixture') === null`)) throw new Error('Pop-up YouTube admis');

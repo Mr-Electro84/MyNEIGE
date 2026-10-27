@@ -7,7 +7,7 @@ const { createDownloads, safeFilename } = require('./downloads');
 const { navigationFor } = require('./navigation');
 const { protectRequests } = require('./session-policy');
 const { APP_ICON } = require('./app-icon');
-const { nativeImage } = require('electron');
+const { nativeImage, dialog } = require('electron');
 const { embeddedFixture, runEmbeddedTests } = require('./embedded-content-test');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
@@ -48,11 +48,13 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
   const browserSession = session.fromPartition(`features-${Date.now()}`, { cache: false });
   protectRequests(browserSession);
   const payload = pdfFixture();
-  let slowStream, progressDialog = false, popupPosts = 0;
+  let slowStream, progressDialog = false, popupPosts = 0, externalRequests = 0;
   browserSession.protocol.handle('https', async request => {
     const embedded = embeddedFixture(request);
     if (embedded) return embedded;
     const url = new URL(request.url);
+    if (url.hostname === 'example.org') ++externalRequests;
+    if (url.pathname === '/external-redirect') return Response.redirect('https://example.org/redirected');
     if (['/inline.pdf', '/inline-auto.pdf', '/inline-post.pdf'].includes(url.pathname)) {
       if (url.pathname === '/inline-post.pdf' && (request.method !== 'POST' || await request.text() !== 'fixture=local-only'))
         throw new Error('Inline PDF popup lost POST body');
@@ -87,7 +89,15 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
   browserSession.on('will-download', (_event, item) => item.setSavePath(path.join(directory, safeFilename(item.getFilename()))));
   const prefiller = new CasPrefill({ ready: () => true });
   let vpnReady = true;
-  const window = protectedWindow(browserSession, prefiller, downloads, () => vpnReady);
+  // Intercepter la délégation système, y compris dans les pop-ups et sous WFP :
+  // ces tests ne lancent jamais le vrai navigateur par défaut.
+  const externalLinks = [];
+  let externalFailure = false;
+  const window = protectedWindow(browserSession, prefiller, downloads, () => vpnReady,
+    async url => {
+      externalLinks.push(url);
+      if (externalFailure) throw new Error('Erreur système fictive avec données privées');
+    });
   let checks = 0;
   try {
     if (nativeImage.createFromPath(APP_ICON).isEmpty()) throw new Error('Application icon missing or unreadable'); ++checks;
@@ -173,6 +183,67 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     }
     window.webContents.removeListener('will-frame-navigate', observe);
     ++checks;
+    externalLinks.length = 0;
+    const beforeExternal = windows.size;
+    for (const [url, target] of [['https://example.org/course?chapter=1#part', '_self'],
+      ['http://example.org/course', '_self'], ['https://example.org/new-tab', '_blank']]) {
+      const before = externalLinks.length;
+      await window.webContents.executeJavaScript(`(() => {
+        const a = document.createElement('a'); a.href = ${JSON.stringify(url)}; a.target = ${JSON.stringify(target)};
+        document.body.append(a); a.click(); a.remove();
+      })()`);
+      await until(() => externalLinks.length > before);
+      await pause(50);
+      if (externalLinks.length !== before + 1 || externalLinks.at(-1) !== url ||
+          window.webContents.getURL() !== one || windows.size !== beforeExternal)
+        throw new Error('Lien externe non délégué une seule fois sans navigation interne');
+      ++checks;
+    }
+    let externalWarning;
+    const showMessageBox = dialog.showMessageBox;
+    try {
+      dialog.showMessageBox = async (_owner, options) => { externalWarning = options; return { response: 0 }; };
+      externalFailure = true;
+      await window.webContents.executeJavaScript(`window.open('https://example.org/failure?private=fixture'); void 0`);
+      await until(() => Boolean(externalWarning));
+      if (!externalWarning.message.includes('navigateur par défaut') || /example|private|données privées/u.test(JSON.stringify(externalWarning)) ||
+          window.webContents.getURL() !== one) throw new Error('Échec système non traité ou données privées affichées'); ++checks;
+    } finally {
+      externalFailure = false;
+      dialog.showMessageBox = showMessageBox;
+    }
+    let beforeExternalCalls = externalLinks.length;
+    await window.webContents.executeJavaScript(`(() => {
+      const iframe = document.createElement('iframe'); iframe.src = 'https://example.org/frame'; document.body.append(iframe);
+      void fetch('https://example.org/resource').catch(() => {});
+      const form = document.createElement('form'); form.method = 'POST'; form.target = '_blank';
+      form.action = 'https://example.org/post'; document.body.append(form); form.submit(); form.remove();
+    })()`);
+    await pause(150);
+    if (externalLinks.length !== beforeExternalCalls || externalRequests || windows.size !== beforeExternal)
+      throw new Error('Iframe, ressource ou formulaire POST exporté hors de MyNEIGE'); ++checks;
+    for (const url of ['http://cas.univ-avignon.fr/', 'https://cas.univ-avignon.fr:444/',
+      'https://cas.univ-avignon.fr./', 'https://user@example.org/', 'mailto:fixture@example.org']) {
+      await window.webContents.executeJavaScript(`location.href = ${JSON.stringify(url)}; void 0`);
+      await pause(50);
+    }
+    if (externalLinks.length !== beforeExternalCalls || window.webContents.getURL() !== one)
+      throw new Error('Destination interne refusée ou protocole non web délégué au système'); ++checks;
+    await window.loadURL('https://www.appigs.univ-avignon.fr/external-redirect').catch(error => {
+      // Chromium peut signaler ERR_FAILED pour une redirection de protocole
+      // synthétique interrompue ; les invariants sont vérifiés ci-dessous.
+      if (!['ERR_ABORTED', 'ERR_BLOCKED_BY_CLIENT', 'ERR_FAILED'].includes(error.code)) throw error;
+    });
+    await pause(100);
+    if (externalLinks.length !== beforeExternalCalls || externalRequests || window.webContents.getURL().startsWith('https://example.org/'))
+      throw new Error('Redirection externe déléguée ou chargée dans MyNEIGE'); ++checks;
+    await window.loadURL(one);
+    vpnReady = false;
+    await window.webContents.executeJavaScript(`location.href = 'https://example.org/no-vpn'; window.open('https://example.org/no-vpn-popup'); void 0`);
+    await pause(100);
+    vpnReady = true;
+    if (externalLinks.length !== beforeExternalCalls || window.webContents.getURL() !== one)
+      throw new Error('Ouverture externe après perte du VPN'); ++checks;
     await window.webContents.executeJavaScript(`(() => {
       const a = document.createElement('a'); a.href = 'https://www.appigs.univ-avignon.fr/fixture.pdf';
       a.download = 'preuve-pilote.pdf'; document.body.append(a); a.click(); a.remove();
@@ -231,8 +302,15 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     if (named.webContents.getURL() !== popupURL || windows.size !== countBeforeMenu)
       throw new Error('Popup university menu did not target the initial APPIGS window'); ++checks;
     const before = windows.size;
+    beforeExternalCalls = externalLinks.length;
     const refused = await window.webContents.executeJavaScript(`['https://example.com', 'file:///C:/Windows/win.ini', 'data:text/html,fixture'].every(url => window.open(url) === null)`);
-    if (!refused || windows.size !== before) throw new Error('Out-of-policy popup accepted'); ++checks;
+    if (!refused || windows.size !== before || externalLinks.length !== beforeExternalCalls + 1 || externalLinks.at(-1) !== 'https://example.com/')
+      throw new Error('Pop-up externe non délégué ou protocole dangereux accepté'); ++checks;
+    beforeExternalCalls = externalLinks.length;
+    await named.webContents.executeJavaScript(`location.href = 'https://example.org/from-popup'; void 0`);
+    await until(() => externalLinks.length > beforeExternalCalls);
+    if (externalLinks.at(-1) !== 'https://example.org/from-popup' || named.webContents.getURL() !== popupURL)
+      throw new Error('Lien externe depuis un pop-up non délégué'); ++checks;
     window.webContents.downloadURL('https://www.appigs.univ-avignon.fr/slow.bin');
     await until(() => downloads.records().some(record => record.name === 'interruption-pilote.bin'));
     downloads.stop();

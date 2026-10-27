@@ -2,7 +2,7 @@
 
 ## Périmètre
 
-Le mode console valide le réseau par `HEAD` HTTPS vers APPIGS avec WinHTTP et un proxy explicite, sans corps de page ni redirection suivie. Le début de J2 ajoute un formulaire Electron et une fenêtre de navigation protégée. Cette dernière charge le site et ses ressources, mais ne journalise que les noms de domaines et statuts des pages, sans contenu ni paramètres d’URL. Un statut 3xx ne démontre pas une connexion ENT réussie. Aucun installateur ni interface finale n’est livré.
+Le mode console valide le réseau par `HEAD` HTTPS vers APPIGS avec WinHTTP et un proxy explicite, sans corps de page ni redirection suivie. Le mode navigateur utilise un formulaire Electron et une fenêtre de navigation protégée. Cette dernière charge le site et ses ressources, mais ne journalise que les noms de domaines et statuts des pages, sans contenu ni paramètres d’URL. Un statut 3xx ne démontre pas une connexion ENT réussie. Le lancement depuis les sources est décrit dans le [README](../README.md) ; les formats prêts à l’emploi et leur construction sont décrits dans le [guide de distribution](ALPHA_DISTRIBUTION.md).
 
 Le contrôleur exige des droits administrateur pour OpenVPN, l’interface, les routes et WFP. Le relais et Electron tournent avec un jeton restreint de niveau moyen, sans droits administrateur actifs. Leur image est protégée en écriture ; la quarantaine précède leur démarrage. Voir la [décision d’architecture](ARCHITECTURE_WINDOWS.md).
 
@@ -34,7 +34,7 @@ Le résultat est enregistré dans `.local/poc/wfp-test.txt` si l’élévation a
 
 ## Préparer OpenVPN
 
-`npm start` intègre désormais la détection d’OpenVPN et propose sa préparation s’il manque, avant la saisie des identifiants. L’installation requiert l’UAC et ne modifie pas silencieusement une installation existante incompatible. Enregistrement facultatif DPAPI/Hello et suppression : [mode d’emploi J2](J2_CREDENTIALS_SETUP.md).
+`npm start` intègre désormais la détection d’OpenVPN et propose sa préparation s’il manque, avant la saisie des identifiants. L’installation requiert l’UAC et ne modifie pas silencieusement une installation existante incompatible. Enregistrement facultatif DPAPI/Hello et suppression : [guide des identifiants et d’OpenVPN](J2_CREDENTIALS_SETUP.md).
 
 Version de départ vérifiée pour ce pilote : OpenVPN Community 2.7.8-I001 x64, depuis [la source officielle](https://openvpn.net/community/). Le moteur et le pilote TAP sont installés sur la machine de développement ; aucune GUI ni service automatique n’a été sélectionné. Pour une autre machine :
 
@@ -93,7 +93,7 @@ powershell -NoProfile -File scripts/run-poc.ps1 -Mode connect -VpnDns $dnsUniver
 
 Aucun DNS système ou public n’est utilisé comme secours pour les destinations web. Un transport DNS chiffré, un port explicite ou une exigence DNSSEC non pris en charge provoquent un arrêt, jamais une résolution en clair de remplacement.
 
-## Ce que le prototype met en place
+## Mécanismes réseau
 
 1. Copie du relais et, en mode navigateur, du runtime Electron et des sources dans un répertoire de session aléatoire sous `ProgramData\MyNEIGE-PoC`, appartenant aux administrateurs. SYSTEM et administrateurs peuvent écrire ; le compte de session dispose seulement de lecture/exécution. Pas de règle fondée sur le chemin partagé de `electron.exe`.
 2. Création d’un TAP dédié avec nom aléatoire, mise en quarantaine WFP avant démarrage du VPN, puis sélection explicite par `--dev-node`. Aucun adaptateur VPN existant n’est réutilisé. OpenVPN est contrôlé par management inversé sur un port exclusif aléatoire de boucle locale ; secret de canal par pipe anonyme et vérification du PID du pair.
@@ -109,7 +109,7 @@ Les règles WFP sont persistantes pour que la quarantaine ne disparaisse pas ave
 
 ## Capture et verdict
 
-Pour démontrer l’isolation, commencer les captures avant la connexion, simultanément sur l’interface physique et celle du VPN. `READY_FOR_CAPTURE` marque une fenêtre de 1 à 60 secondes avec sondes HEAD répétées toutes les cinq secondes, après la première requête. Effectuer les scénarios R1–R10 du plan, dont une application tierce vers la même destination, une coupure physique et une perte du tunnel.
+Pour démontrer l’isolation, commencer les captures avant la connexion, simultanément sur l’interface physique et celle du VPN. `READY_FOR_CAPTURE` marque une fenêtre de 1 à 60 secondes avec sondes HEAD répétées toutes les cinq secondes, après la première requête. Effectuer les scénarios R1 à R10 de la [matrice de recette](POC_STATUS.md#matrice-de-recette), dont une application tierce vers la même destination, une coupure physique et une perte du tunnel.
 
 Attendu : le transport OpenVPN vers le serveur est visible sur l’interface physique ; aucun flux web ni DNS applicatif équivalent n’y apparaît hors tunnel. La résolution initiale du serveur VPN est une exception d’amorçage identifiée. Le DNS habituel de l’hôte et les applications tierces conservent leur chemin.
 
@@ -117,7 +117,7 @@ Les captures peuvent contenir des informations sensibles, en particulier sur la 
 
 Un statut HTTPS et des requêtes bloquées après arrêt ne remplacent pas la capture. Le résultat du programme conserve donc `feasibility: not_yet_certified`. Le rapport de recette indique séparément les preuves exécutées et les cas encore ouverts.
 
-### Capture reproductible J1
+### Capture reproductible en mode console
 
 ```powershell
 npm run poc:qualify
@@ -134,7 +134,7 @@ Le témoin indépendant est `curl.exe`, sans proxy ni adresse/interface source f
 
 Les composants Pktmon de type filtre NDIS ne sont pas des cartes physiques. L’analyse utilise les Miniport et les GUID ; elle gère aussi les trames Wi-Fi natives que l’export Pktmon étiquette Ethernet sur cette machine. Les nombres de paquets sont des observations par composant, pas un comptage dédupliqué des échanges.
 
-## Début de J2 : formulaire et navigateur
+## Formulaire et navigateur
 
 ```powershell
 npm ci
@@ -146,9 +146,9 @@ Le précontrôle sans identifiants vérifie des serveurs locaux positivement tes
 
 Il exerce aussi Chromium lui-même contre un proxy local fictif : `407`, authentification et début TLS, puis fermeture volontaire, sans contacter de site distant. La capture d’aperçu du formulaire est facultative : le compositeur peut refuser une capture de fenêtre masquée ; les contrôles réseau et sandbox restent obligatoires.
 
-`npm start` lance un contrôleur élevé masqué, puis un formulaire Electron non administrateur. Saisir le compte VPN dans ce formulaire. Le pipe nommé est authentifié par le PID du processus supervisé avant tout échange de secret. La fenêtre APPIGS n’apparaît qu’après `CONNECTED`, vérification de l’identité GUID/nom/LUID/index/IP, DNS et HEAD HTTPS. La session web est en mémoire, sans bridge exposé au site ; les vérifications TLS restent actives. L’extension [préremplissage CAS J2](CAS_PREFILL.md) réutilise une copie temporaire en mémoire, limitée à la page CAS attendue et à une seule délivrance. Le clic sur « SE CONNECTER » reste manuel.
+`npm start` lance un contrôleur élevé masqué, puis un formulaire Electron non administrateur. Saisir le compte VPN dans ce formulaire. Le pipe nommé est authentifié par le PID du processus supervisé avant tout échange de secret. La fenêtre APPIGS n’apparaît qu’après `CONNECTED`, vérification de l’identité GUID/nom/LUID/index/IP, DNS et HEAD HTTPS. La session web est en mémoire, sans bridge exposé au site ; les vérifications TLS restent actives. Le [préremplissage CAS](CAS_PREFILL.md) réutilise une copie temporaire en mémoire, limitée à la page CAS attendue et à une seule délivrance. Le clic sur « SE CONNECTER » reste manuel.
 
-Les popups universitaires restent dans la session protégée. Les autres domaines, schémas, ports et permissions sont refusés. Le menu Navigation permet Précédent/Suivant/Accueil APPIGS ; Fichiers → Téléchargements affiche le suivi et l’annulation. Les téléchargements HTTPS admis et les `blob` de même origine demandent une destination ; aucun fichier n’est ouvert automatiquement. [Détails J2](J2_NAVIGATION_DOWNLOADS.md). La liste de domaines est provisoire et doit être resserrée après le parcours réel ENT/CAS. Fermer le formulaire ou cliquer « Fermer la session » termine la session ; durée de deux heures, renouvelable depuis l’avertissement des cinq dernières minutes. À expiration normale, le contrôleur révoque le permis proxy du navigateur et arrête les relais, le VPN et le TAP ; Electron ferme toutes les pages et conserve uniquement le formulaire local d’explication. Le confinement WFP et le contrôleur restent présents jusqu’à la fermeture de cet écran. Une perte du VPN, d’un relais ou du contrôleur conserve l’arrêt de sécurité. Les diagnostics sont dans `.local/browser/live-session.txt` et le code final dans `exit-code.txt`. Les fichiers de travail Chromium sont sous `.local/browser-data/` ; aucune promesse d’effacement de toutes les copies mémoire ou de la pagination OS.
+Les popups universitaires restent dans la session protégée. Les liens web externes peuvent être délégués au navigateur par défaut selon les [règles de navigation](J2_NAVIGATION_DOWNLOADS.md#liens-externes) ; les ressources hors politique, les schémas et ports non admis et les permissions restent refusés. Le menu Navigation permet Précédent/Suivant/Accueil APPIGS ; Fichiers → Téléchargements affiche le suivi et l’annulation. Les téléchargements HTTPS admis et les `blob` de même origine demandent une destination ; aucun fichier n’est ouvert automatiquement. [Navigation et téléchargements](J2_NAVIGATION_DOWNLOADS.md). La liste de domaines est provisoire et doit être resserrée après le parcours réel ENT/CAS. Fermer le formulaire ou cliquer « Fermer la session » termine la session ; durée de deux heures, renouvelable depuis l’avertissement des cinq dernières minutes. À expiration normale, le contrôleur révoque le permis proxy du navigateur et arrête les relais, le VPN et le TAP ; Electron ferme toutes les pages et conserve uniquement le formulaire local d’explication. Le confinement WFP et le contrôleur restent présents jusqu’à la fermeture de cet écran. Une perte du VPN, d’un relais ou du contrôleur conserve l’arrêt de sécurité. Les diagnostics sont dans `.local/browser/live-session.txt` et le code final dans `exit-code.txt`. Les fichiers de travail Chromium sont sous `.local/browser-data/` ; aucune promesse d’effacement de toutes les copies mémoire ou de la pagination OS.
 
 Le lanceur reste actif jusqu’à la fin du contrôleur. Ce prototype est qualifié avec élévation UAC du même compte Windows ; l’élévation avec les identifiants d’un autre administrateur depuis un compte standard n’est pas qualifiée.
 
@@ -164,12 +164,12 @@ powershell -NoProfile -File scripts/run-poc.ps1 -Mode cleanup
 
 La récupération lit le journal d’identité du TAP dans le répertoire protégé et retire uniquement cet adaptateur au nom de session validé, puis les règles du fournisseur WFP MyNEIGE et les fichiers connus. Elle n’efface pas de règles tierces, ne tue pas d’autres VPN et ne supprime pas de routes sur la seule base de leur métrique. Une récupération d’adaptateur échouée conserve les restrictions WFP. Si OpenVPN était installé dans un chemin personnalisé, vérifier ce chemin avant récupération : l’outil de récupération utilise actuellement le chemin standard.
 
-## Limites avant le jalon suivant
+## Limites et validations restantes
 
 - Recette sur d’autres machines et configurations indispensable.
 - Tests WFP de quarantaine IPv4/IPv6 distincts d’une recette complète du filtrage tunnel.
 - IPv6 applicatif bloqué ; les sondes UDP ne remplacent pas une recette WebRTC/HTTP3 complète.
-- Parcours ENT/CAS et MFA encore à qualifier ; pas de reconnexion automatique ni de stockage du mot de passe.
+- Parcours ENT/CAS complet et MFA encore à qualifier ; pas de reconnexion automatique. L’enregistrement facultatif des identifiants utilise DPAPI et leur réutilisation nécessite Windows Hello ; voir les [garanties et limites du coffre](J2_CREDENTIALS_SETUP.md#protection-et-identité).
 - Réseau hôte instable, adaptateur préexistant ou VPN tiers modifiant les routes : arrêt conservateur possible.
 - Les routes connectées créées lors de l’affectation de l’IP VPN peuvent entrer en conflit avec un réseau local existant. Le filtrage empêche son utilisation par les applications tierces ; l’absence d’impact transitoire pendant l’initialisation reste à mesurer, et tout conflit interdit la validation du modèle de routage.
 - Tests réseau manuels encore nécessaires pour les interfaces, crashs et changements de route ; ne pas annoncer ces cas réussis avec les seuls tests de protocole.

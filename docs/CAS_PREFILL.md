@@ -1,6 +1,6 @@
-# Pilote J2 — préremplissage CAS
+# Préremplissage CAS
 
-Fonctionnalité autorisée le 23 octobre 2026, ajoutée au navigateur existant. Les identifiants CAS et OpenVPN sont identiques selon l’utilisateur. MyNEIGE préremplit les champs ; **l’utilisateur clique lui-même sur « SE CONNECTER »**. Aucun clic, événement input/change ou envoi du formulaire n’est déclenché par le préremplissage.
+Les identifiants CAS et OpenVPN sont identiques selon l’utilisateur. MyNEIGE préremplit les champs ; **l’utilisateur clique lui-même sur « SE CONNECTER »**. Aucun clic, événement input/change ou envoi du formulaire n’est déclenché par le préremplissage.
 
 ## Utilisation
 

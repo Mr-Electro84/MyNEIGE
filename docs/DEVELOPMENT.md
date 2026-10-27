@@ -117,7 +117,9 @@ La console interactive demande les identifiants localement. Ne jamais fournir de
 
 Le menu **Navigation** propose Précédent, Suivant et Accueil APPIGS. **Fichiers → Téléchargements** (`Ctrl+J`) affiche le suivi et l’annulation ; les fichiers ne sont jamais ouverts automatiquement. Le menu **Université** conserve la fenêtre principale et sa session, sans garantir une authentification automatique auprès de chaque service.
 
-Les services protégés, dont Nextcloud et les pages d’authentification universitaires, restent sous VPN. Mail/PARTAGE, RENATER et les lecteurs externes autorisés suivent une politique explicite de sortie sur le réseau habituel. Les échecs n’autorisent aucun repli d’une voie sur l’autre. Les lecteurs YouTube intégrés ne donnent pas accès à la navigation principale ni aux pop-ups externes YouTube.
+Les liens HTTP/HTTPS vers les domaines extérieurs à la liste de navigation s’ouvrent dans le navigateur par défaut, depuis la fenêtre principale comme depuis un pop-up universitaire. Les adresses universitaires ou RENATER refusées ne sont jamais déléguées ; les ressources intégrées, téléchargements et redirections hors politique restent filtrés. Voir les [règles des liens externes](J2_NAVIGATION_DOWNLOADS.md#liens-externes).
+
+Les services protégés, dont Nextcloud et les pages d’authentification universitaires, restent sous VPN. Mail/PARTAGE, RENATER et les lecteurs externes autorisés suivent une politique explicite de sortie sur le réseau habituel. Les échecs n’autorisent aucun repli d’une voie sur l’autre. Les lecteurs YouTube intégrés ne donnent pas accès à la navigation principale ni aux pop-ups YouTube dans MyNEIGE.
 
 Les identifiants peuvent être supprimés depuis l’interface sans déverrouillage Hello ou, lorsque l’application est fermée, avec :
 
@@ -139,7 +141,7 @@ La recette de développement du 25 octobre 2026 a confirmé le premier accès à
 
 Distinguer systématiquement compilation, tests de protocole, fixtures navigateur, précontrôles WFP et recettes réelles. Une réussite locale ne prouve pas l’isolation complète sur tous les environnements et ne valide pas un paquet construit antérieurement. Les limites de qualification des distributions sont précisées dans le [guide de distribution](ALPHA_DISTRIBUTION.md).
 
-Les anciens jalons J1/J2/J3 et `PLAN.md` conservent du contexte historique ; certaines mentions de fonctionnalités différées sont dépassées. Le README prime pour l’état actuel. Les études de faisabilité, notamment [celle des identifiants et d’OpenVPN](J2_CREDENTIALS_OPENVPN_FEASIBILITY.md), décrivent des propositions historiques et ne remplacent pas les guides d’implémentation.
+Le README décrit l’état actuel du projet. Les rapports datés conservent les résultats et les limites des essais exécutés à cette date ; ils ne valident pas automatiquement les évolutions ultérieures. La [matrice de recette](POC_STATUS.md#matrice-de-recette) définit les scénarios R1 à R16 et leurs critères, indépendamment de l’organisation du développement.
 
 ## Distributions et site de présentation
 

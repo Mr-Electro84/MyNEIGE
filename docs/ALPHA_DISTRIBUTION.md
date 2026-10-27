@@ -1,6 +1,6 @@
 # Distribution Alpha Windows
 
-Statut : **GO reçu et implémentation réalisée** pour Windows 11 x64. Le profil VPN universitaire est embarqué à la demande du développeur. Le lanceur natif, le dossier autonome, le ZIP et l’installateur NSIS sont construits localement ; la publication reste une étape distincte.
+Les formats de distribution sont implémentés pour **Windows 11 x64**. Le profil VPN universitaire est embarqué à la demande du développeur. Le lanceur natif, le dossier autonome, le ZIP et l’installateur NSIS sont construits localement ; la publication reste une étape distincte.
 
 ## Construire et utiliser
 
@@ -18,7 +18,7 @@ Le lanceur `MyNEIGE.exe`, à intégrité normale, utilise un seul Windows PowerS
 
 L’installateur utilise l’emplacement fixe protégé `%ProgramFiles%\MyNEIGE`, crée les raccourcis du menu Démarrer et une entrée de désinstallation. Il conserve OpenVPN et les données utilisateur ; un raccourci séparé propose leur suppression avec confirmation **avant** désinstallation. L’installateur et le lanceur se verrouillent mutuellement ; les sessions natives sont aussi réservées pendant la copie/suppression. La désinstallation récupère les seules protections MyNEIGE résiduelles et supprime une liste explicite de fichiers, sans suppression récursive du dossier d’installation.
 
-La construction utilise **NSIS directement**, déjà installé sur le poste, et le runtime Electron épinglé. Aucun electron-builder n’est nécessaire pour ce premier format au lanceur natif. La proposition ci-dessous conserve les contraintes et choix qui ont guidé l’implémentation ; la recette sur VM propre reste à effectuer avant diffusion élargie.
+La construction utilise **NSIS directement** et le runtime Electron épinglé. Aucun electron-builder n’est nécessaire. Les choix ci-dessous décrivent l’implémentation ; la recette sur VM propre reste à effectuer avant diffusion élargie.
 
 ## Construction 1.0.1-alpha.1 — 25 octobre 2026
 
@@ -81,13 +81,11 @@ Rejouer les précontrôles IPv4/IPv6/UDP, enfants, sandbox et proxy sur les **bi
 
 Pour le ZIP, ajouter extraction dans un répertoire utilisateur, relocalisation entre deux sessions et lancement sur une seconde machine équipée des prérequis. Les identifiants DPAPI et Windows Hello restent propres au compte et à la machine ; ils ne doivent pas être présentés comme transportables.
 
-## Décision proposée
+## Formats disponibles et limites
 
-Le GO couvre le **dossier standalone, l’installateur NSIS Windows x64 et l’archive ZIP issue du même dossier**, avec profil embarqué. Le portable mono-fichier, les mises à jour automatiques et Linux restent différés. La publication et la diffusion aux testeurs sont des étapes distinctes.
+La construction produit le **dossier standalone, l’installateur NSIS Windows x64 et l’archive ZIP issue du même dossier**, avec profil embarqué. Le portable mono-fichier, les mises à jour automatiques et Linux ne sont pas pris en charge. La publication et la diffusion aux testeurs sont des étapes distinctes.
 
 ## Références techniques
 
 - [Electron — Distribution Overview](https://www.electronjs.org/docs/latest/tutorial/distribution-overview) : empaquetage des ressources et du runtime, signature et publication.
-- [electron-builder v26 — Target Selection Guide](https://www.electron.build/v26/docs/targets/) : formats Windows et cas d’usage.
-- [electron-builder — NSIS et portable](https://www.electron.build/docs/nsis/) : options d’installation et cible portable. Consulter la documentation correspondant à la version stable épinglée lors du GO.
-- Contraintes du dépôt : [architecture Windows](ARCHITECTURE_WINDOWS.md), [plan de packaging](../PLAN.md), `BrowserPilot::prepare` dans `native/windows/poc/browser.cpp`, lancement dans `scripts/start-browser.ps1` et contrôle du coffre dans `native/windows/poc/vault.cpp`.
+- Contraintes du dépôt : [architecture Windows](ARCHITECTURE_WINDOWS.md), [guide de développement](DEVELOPMENT.md), `BrowserPilot::prepare` dans `native/windows/poc/browser.cpp`, lancement dans `scripts/start-browser.ps1` et contrôle du coffre dans `native/windows/poc/vault.cpp`.

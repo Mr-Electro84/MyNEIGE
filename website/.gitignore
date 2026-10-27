@@ -1,4 +1,0 @@
-# Les paquets existants sont copiés ici pour la prévisualisation et l'hébergement.
-# Ne pas versionner les binaires ; les transférer séparément avec le site.
-/downloads/*
-!/downloads/.gitkeep

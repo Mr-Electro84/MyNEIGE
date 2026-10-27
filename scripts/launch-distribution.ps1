@@ -29,7 +29,7 @@ try {
             if (Test-Path -LiteralPath $data) {
                 # Inspect every descendant before deleting only these owned paths.
                 Assert-PlainTree $data
-                foreach ($name in @('credentials.dpapi','browser-data','logs','downloads')) {
+                foreach ($name in @('credentials.dpapi','browser-data','logs','downloads','update-preferences.json','update-preferences.json.tmp')) {
                     $target = [IO.Path]::GetFullPath((Join-Path $data $name))
                     if (!$target.StartsWith(([IO.Path]::GetFullPath($data) + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Suppression hors des donnees MyNEIGE refusee.' }
                     if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }

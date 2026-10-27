@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; form-action 'none'; frame-src 'none'; base-uri 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyNEIGE · Mise à jour</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="update-toast.js" defer></script>
+</head>
+<body class="update-toast">
+  <section aria-labelledby="update-title">
+    <p class="label">MyNEIGE</p>
+    <h1 id="update-title">Fonctionnalité à venir</h1>
+    <p id="update-version" role="status" aria-live="polite">La vérification des mises à jour sera disponible prochainement. En attendant, consultez le site web de MyNEIGE pour télécharger la dernière version.</p>
+    <div id="update-actions" class="update-actions" hidden>
+      <button id="update-download" type="button">Télécharger la mise à jour</button>
+      <button id="update-later" class="secondary" type="button">Me rappeler plus tard</button>
+      <button id="update-never" class="secondary" type="button">Ne plus me rappeler</button>
+    </div>
+    <button id="update-website" type="button">Voir le site web</button>
+    <button id="update-close" class="secondary" type="button">Fermer</button>
+    <p id="update-error" class="note" role="status" aria-live="polite"></p>
+  </section>
+</body>
+</html>

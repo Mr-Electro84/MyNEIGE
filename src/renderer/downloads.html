@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; form-action 'none'; frame-src 'none'; base-uri 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyNEIGE · Téléchargements</title>
+  <link rel="stylesheet" href="downloads.css">
+  <script src="downloads.js" defer></script>
+</head>
+<body>
+  <header>
+    <div><p class="brand">MyNEIGE</p><h1>Téléchargements</h1></div>
+    <button id="close" class="secondary" type="button">Fermer</button>
+  </header>
+  <div class="toolbar">
+    <p id="summary" role="status" aria-live="polite">Téléchargements de cette session</p>
+    <button id="cancel-all" class="secondary" type="button" hidden>Annuler les transferts en cours</button>
+  </div>
+  <main aria-label="Liste des téléchargements">
+    <p id="empty">Aucun téléchargement pour cette session.<br>Les fichiers téléchargés apparaîtront ici.</p>
+    <ol id="downloads"></ol>
+  </main>
+  <footer>
+    <p id="message" role="status" aria-live="polite"></p>
+    <p class="note">Historique récent de cette session. Fermer cette fenêtre laisse les transferts continuer.</p>
+  </footer>
+</body>
+</html>

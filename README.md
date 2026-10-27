@@ -11,9 +11,10 @@ L’application démarre le VPN universitaire et facilite la connexion aux servi
 - **Une seule saisie pour démarrer** : vos identifiants servent à ouvrir le VPN, puis à préremplir la page de connexion universitaire pour APPIGS. Vous gardez la main sur le clic « SE CONNECTER ».
 - **Vos services réunis** : le menu Université permet de passer d’un service à l’autre dans la même session.
 - **Windows Hello, si vous le souhaitez** : enregistrez vos identifiants, chiffrés localement par Windows, puis réutilisez-les après vérification par Windows Hello. La saisie manuelle reste disponible et l’enregistrement peut être supprimé à tout moment.
-- **Une navigation pratique** : précédent, suivant, retour à APPIGS, consultation des PDF et téléchargements avec choix de destination, suivi et annulation.
+- **Une navigation pratique** : précédent, suivant, retour à APPIGS, consultation des PDF et téléchargements avec choix de destination. La fenêtre **Fichiers → Téléchargements** (`Ctrl+J`) affiche le nom, le poids, la date et la progression, avec ouverture du fichier, localisation dans son dossier et annulation des transferts en cours.
 - **Les liens externes dans votre navigateur** : les liens HTTP/HTTPS vers les domaines hors de la liste de navigation MyNEIGE s’ouvrent dans votre navigateur par défaut, avec sa connexion et sa session habituelles.
 - **Les contenus de cours intégrés** : prise en charge des lecteurs YouTube autorisés, y compris dans les activités H5P.
+- **La vérification des mises à jour est à venir** : **Aide → Vérifier les mises à jour** affiche une annonce avec un bouton **Voir le site web**, pour consulter les versions proposées sur le site MyNEIGE. L’installation reste manuelle ; le nouvel installateur désinstalle d’abord la version précédente. Voir le [fonctionnement des mises à jour](docs/UPDATES.md).
 
 ### Comment fonctionne le VPN ?
 

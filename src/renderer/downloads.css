@@ -1,0 +1,45 @@
+:root {
+  font: 14px/1.5 system-ui, sans-serif;
+  color: #202a51;
+  background: #f3f5fc;
+  color-scheme: light;
+  --blue: #182f9e;
+  --muted: #505d82;
+  --border: #dce1f2;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; padding: 24px; display: flex; flex-direction: column; height: 100vh; gap: 16px; }
+header, .toolbar, .file-heading, .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+header { align-items: flex-start; }
+.brand { margin: 0 0 4px; font-weight: 750; letter-spacing: .06em; color: var(--blue); }
+h1 { margin: 0; font-size: 27px; line-height: 1.2; letter-spacing: -.025em; color: var(--blue); }
+p { margin: 0; color: var(--muted); }
+button { flex-shrink: 0; border: 1px solid transparent; border-radius: 8px; padding: 9px 13px; background: var(--blue); color: white; font: inherit; font-weight: 600; cursor: pointer; }
+button:hover:enabled { background: #122579; }
+button:disabled { opacity: .5; cursor: default; }
+.secondary { background: white; border-color: #c5cde9; color: var(--blue); }
+.secondary:hover:enabled { background: #eef0fb; }
+:focus-visible { outline: 3px solid #5d6dbb; outline-offset: 3px; }
+.toolbar { flex-wrap: wrap; font-size: 13px; }
+main { flex: 1; min-height: 0; overflow-y: auto; padding: 3px; }
+#empty { padding: 50px 20px; border: 1px dashed #c5cde9; border-radius: 12px; text-align: center; line-height: 1.8; }
+ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.download { min-width: 0; padding: 18px; background: white; border: 1px solid var(--border); border-radius: 12px; }
+.file-heading { align-items: flex-start; }
+.file-name { min-width: 0; margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.status { flex-shrink: 0; padding: 3px 8px; border-radius: 6px; font-size: 12px; color: var(--blue); background: #eef0fb; }
+.status.completed { color: #1e6745; background: #eaf5ef; }
+.status.cancelled, .status.interrupted { color: #7e4921; background: #fff2e5; }
+.details { margin: 8px 0; font-size: 13px; }
+progress { width: 100%; height: 7px; accent-color: var(--blue); margin: 4px 0 10px; display: block; }
+.actions { justify-content: flex-start; flex-wrap: wrap; margin-top: 12px; }
+.actions button { font-size: 13px; padding: 7px 12px; }
+footer { padding-top: 12px; border-top: 1px solid var(--border); }
+#message { color: #9b302e; margin-bottom: 6px; }
+#message:empty { display: none; }
+.note { font-size: 12px; }
+@media (max-width: 600px) {
+  body { padding: 18px; gap: 12px; }
+  .file-heading { flex-direction: column; gap: 6px; }
+}

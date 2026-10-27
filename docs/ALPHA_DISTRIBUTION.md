@@ -83,6 +83,8 @@ Pour le ZIP, ajouter extraction dans un répertoire utilisateur, relocalisation 
 
 ## Formats disponibles et limites
 
+Le développement intègre désormais un [signalement des mises à jour](UPDATES.md) par API, avec révision dans `package.json` et toast. L’installation reste manuelle. Le nouvel installateur exécute d’abord le désinstalleur précédent, puis copie la nouvelle version ; le désinstalleur précédent nettoie les fichiers de son inventaire. La recette de ce parcours nécessite deux paquets et reste distincte des résultats historiques ci-dessus.
+
 La construction produit le **dossier standalone, l’installateur NSIS Windows x64 et l’archive ZIP issue du même dossier**, avec profil embarqué. Le portable mono-fichier, les mises à jour automatiques et Linux ne sont pas pris en charge. La publication et la diffusion aux testeurs sont des étapes distinctes.
 
 ## Références techniques

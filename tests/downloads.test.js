@@ -23,21 +23,26 @@ test('suggested filenames cannot contain paths, device names, streams or bidi co
   assert.equal(safeFilename('...'), 'fichier'); assert.equal(safeFilename('document.pdf'), 'document.pdf');
   assert(Array.from(safeFilename('é'.repeat(300) + '.pdf')).length <= 160);
 });
-function fixture() {
+function fixture(options = {}) {
   const session = new EventEmitter(), window = new EventEmitter(), statuses = [];
   let ready = true, url = PAGE;
   window.webContents = { getURL: () => url, isDestroyed: () => false };
   window.isDestroyed = () => false; window.setProgressBar = () => {};
-  const manager = createDownloads({ session, ready: () => ready, directory: 'D:\\downloads', dialog: {}, report: value => statuses.push(value) });
+  const manager = createDownloads({ session, ready: () => ready, directory: 'D:\\downloads', report: value => statuses.push(value), ...options });
   manager.track(window);
-  const item = new EventEmitter();
-  item.getFilename = () => 'test.pdf'; item.getTotalBytes = () => 100; item.getReceivedBytes = () => 40;
-  item.getURLChain = () => [PAGE]; item.setSaveDialogOptions = value => { item.options = value; };
-  item.cancel = () => { item.emit('done', {}, 'cancelled'); };
+  function newItem() {
+    const item = new EventEmitter();
+    item.getFilename = () => 'test.pdf'; item.getTotalBytes = () => 100; item.getReceivedBytes = () => 40;
+    item.getSavePath = () => 'D:\\downloads\\test.pdf'; item.getStartTime = () => 1000; item.getEndTime = () => 1002;
+    item.getURLChain = () => [PAGE]; item.setSaveDialogOptions = value => { item.options = value; };
+    item.cancel = () => { item.emit('done', {}, 'cancelled'); };
+    return item;
+  }
+  const item = newItem();
   const event = { prevented: false, preventDefault() { this.prevented = true; } };
-  return { manager, session, window, item, event, statuses,
+  return { manager, session, window, item, event, statuses, newItem,
     block: () => { ready = false; }, blank: () => { url = 'about:blank'; },
-    start: () => session.emit('will-download', event, item, window.webContents) };
+    start: (download = item) => session.emit('will-download', event, download, window.webContents) };
 }
 test('file save is offered only for known windows with a ready VPN', () => {
   const f = fixture(); f.start();
@@ -62,4 +67,95 @@ test('a download popup may use only its explicitly approved initial target', () 
   const f = fixture(); f.blank(); f.start(); assert(f.event.prevented);
   const approved = fixture(); approved.blank(); approved.manager.expectNavigation(approved.window.webContents, PAGE); approved.start();
   assert(!approved.event.prevented); approved.manager.stop();
+});
+
+test('metadata uses the saved filename, actual bytes and download timestamps without exposing its path', () => {
+  const f = fixture();
+  f.item.getSavePath = () => 'D:\\ailleurs\\Document renommé.pdf';
+  f.start();
+  assert.equal(f.manager.records()[0].startedAt, 1000000);
+  assert.equal(f.manager.records()[0].endedAt, null);
+  assert.equal(f.manager.records()[0].canOpen, false);
+  f.item.getTotalBytes = () => 0;
+  f.item.emit('updated', {}, 'progressing');
+  assert.equal(f.manager.records()[0].total, 0);
+  f.item.emit('done', {}, 'completed');
+  const record = f.manager.records()[0];
+  assert.equal(record.name, 'Document renommé.pdf'); assert.equal(record.received, 40);
+  assert.equal(record.endedAt, 1002000); assert.equal(record.active, false); assert.equal(record.canOpen, true);
+  assert(!JSON.stringify(record).includes('ailleurs')); assert(!('savedPath' in record));
+  assert.deepEqual(f.statuses, ['STARTED', 'COMPLETED']);
+});
+
+test('only completed session files can be opened or revealed using their saved path', async () => {
+  const calls = [];
+  const f = fixture({ fileSystem: { stat: async () => ({ isFile: () => true }) }, shell: {
+    openPath: async file => { calls.push(['open', file]); return ''; }, showItemInFolder: file => calls.push(['reveal', file])
+  } });
+  f.start(); const id = f.manager.records()[0].id;
+  assert.equal((await f.manager.action(id, 'open')).ok, false);
+  f.item.emit('done', {}, 'completed');
+  assert.equal((await f.manager.action('D:\\secret.txt', 'open')).ok, false);
+  assert.equal((await f.manager.action(id, 'unknown')).ok, false);
+  assert.equal((await f.manager.action(id, 'open')).ok, true);
+  assert.equal((await f.manager.action(id, 'reveal')).ok, true);
+  assert.deepEqual(calls, [['open', 'D:\\downloads\\test.pdf'], ['reveal', 'D:\\downloads\\test.pdf']]);
+  f.block(); assert.equal((await f.manager.action(id, 'open')).ok, false); assert.equal(calls.length, 2);
+});
+
+test('missing files, folders and OS failures produce generic local errors', async () => {
+  let mode = 'missing', calls = 0;
+  const f = fixture({ fileSystem: { stat: async () => {
+    if (mode === 'missing') throw Object.assign(new Error('D:\\private\\file.pdf'), { code: 'ENOENT' });
+    return { isFile: () => mode !== 'folder' };
+  } }, shell: { openPath: async () => { calls++; if (mode === 'throw') throw new Error('D:\\private'); return 'D:\\private: OS failure'; } } });
+  f.start(); f.item.emit('done', {}, 'completed'); const id = f.manager.records()[0].id;
+  for (const value of ['missing', 'folder', 'os-error', 'throw']) {
+    mode = value; const result = await f.manager.action(id, 'open');
+    assert.equal(result.ok, false); assert(!JSON.stringify(result).includes('private'));
+  }
+  assert.equal(calls, 2);
+});
+
+test('session stop during file verification prevents opening and concurrent actions are bounded', async () => {
+  let finish, calls = 0;
+  const f = fixture({ fileSystem: { stat: () => new Promise(resolve => { finish = resolve; }) },
+    shell: { openPath: async () => { calls++; return ''; } } });
+  f.start(); f.item.emit('done', {}, 'completed'); const id = f.manager.records()[0].id;
+  const pending = f.manager.action(id, 'open');
+  assert.equal((await f.manager.action(id, 'reveal')).ok, false);
+  f.manager.stop(); finish({ isFile: () => true });
+  assert.equal((await pending).ok, false); assert.equal(calls, 0);
+});
+
+test('cancelled files and incomplete saved paths never enable file actions', async () => {
+  for (const state of ['cancelled', 'interrupted', 'completed']) {
+    const f = fixture(); f.item.getSavePath = () => 'relative.pdf'; f.start(); f.item.emit('done', {}, state);
+    assert.equal(f.manager.records()[0].canOpen, false);
+    assert.equal((await f.manager.action(f.manager.records()[0].id, 'open')).ok, false);
+  }
+});
+
+test('recent history stays bounded while retaining an old active interrupted download', () => {
+  const f = fixture(); let notifications = 0;
+  const unsubscribe = f.manager.subscribe(() => notifications++);
+  f.start(); const first = f.manager.records()[0].id;
+  f.item.emit('updated', {}, 'interrupted');
+  for (let i = 0; i < 30; i++) {
+    const item = f.newItem(); f.start(item); item.emit('done', {}, 'completed');
+  }
+  assert.equal(f.manager.records().length, 21);
+  assert(f.manager.records().some(record => record.id === first && record.active));
+  assert(notifications > 30); unsubscribe(); const before = notifications;
+  f.manager.stop(); assert.equal(notifications, before); assert.equal(f.manager.records().length, 20);
+  f.manager.dispose(); assert.equal(f.session.listenerCount('will-download'), 0);
+});
+
+test('the window opens only for a tracked source and never starts file actions automatically', async () => {
+  let shown = 0;
+  const f = fixture({ show: async () => { shown++; } });
+  await f.manager.show(f.window); assert.equal(shown, 1);
+  await f.manager.show({ webContents: {}, isDestroyed: () => false }); assert.equal(shown, 1);
+  f.start(); f.item.emit('done', {}, 'completed'); assert.equal(shown, 1);
+  f.manager.stop(); await f.manager.show(f.window); assert.equal(shown, 1);
 });

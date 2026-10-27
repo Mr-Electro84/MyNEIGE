@@ -15,9 +15,9 @@ bool universityHost(const std::string &host) {
 bool publicServiceHost(const std::string &host) {
     if (!validHost(host))
         return false;
-    // Le relais voit seulement CONNECT : Electron impose en complément le
-    // contexte iframe universitaire et les chemins des lecteurs externes.
-    if (host == "partage.univ-avignon.fr")
+    // Le relais voit seulement CONNECT : Electron impose en complément les
+    // contextes des lecteurs externes et les deux URL de l'API MyNEIGE.
+    if (host == "partage.univ-avignon.fr" || host == "my-neige.42web.io")
         return true;
     for (const auto &domain : {"renater.fr", "youtube.com", "youtube-nocookie.com",
                                "googlevideo.com", "ytimg.com", "h5p.com", "h5p.org", "h5p.io"})

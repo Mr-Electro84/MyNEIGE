@@ -18,7 +18,7 @@ function historyTarget(contents, offset) {
   const entry = history.getEntryAtIndex(history.getActiveIndex() + offset);
   return Boolean(entry && allowedURL(entry.url));
 }
-function installNavigation({ window, Menu, ready, downloads, universityWindow = window }) {
+function installNavigation({ window, Menu, ready, downloads, universityWindow = window, checkUpdates }) {
   const contents = window.webContents;
   const canVisitUniversity = () => ready() && !universityWindow.isDestroyed() && !universityWindow.webContents.isDestroyed();
   const visitUniversity = url => {
@@ -49,7 +49,7 @@ function installNavigation({ window, Menu, ready, downloads, universityWindow = 
       { id: 'downloads', label: 'Téléchargements…', accelerator: 'Control+J', enabled: Boolean(downloads),
         click: () => { void downloads?.show(window).catch(() => {}); } }
     ] },
-    helpMenu(window)
+    helpMenu(window, undefined, { checkUpdates })
   ]);
   const refresh = () => {
     if (window.isDestroyed() || contents.isDestroyed()) return;

@@ -54,6 +54,12 @@ button:disabled { opacity: .55; cursor: default; }
 .disclaimer h2 { font-size: 14px; margin: 0 0 10px; }
 .disclaimer p { margin: 6px 0 0; }
 :focus-visible { outline: 3px solid var(--brand-periwinkle); outline-offset: 3px; }
+.update-toast { padding: 20px; background: white; border: 2px solid var(--brand-periwinkle); min-height: 100vh; }
+.update-toast h1 { font-size: 23px; margin-top: 8px; }
+.update-toast p { margin: 6px 0; }
+.update-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.update-actions button { width: auto; flex: 1 1 auto; margin: 0; padding: 10px 12px; font-size: 13px; }
+.update-actions button:first-child { flex-basis: 100%; }
 @media (max-width: 860px) {
   body { padding: 20px; }
   main { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 20px; }

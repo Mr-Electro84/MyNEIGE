@@ -6,7 +6,7 @@ const { embeddedNavigationAllowed } = require('./embedded-content-policy');
 const { installNavigation } = require('./navigation');
 const { APP_ICON } = require('./app-icon');
 const { installMailSso } = require('./mail-sso');
-function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready = () => true, Menu = require('electron').Menu, windowOptions = {}, universityWindow, mailReport,
+function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready = () => true, Menu = require('electron').Menu, windowOptions = {}, universityWindow, mailReport, checkUpdates,
   openExternal = url => require('electron').shell.openExternal(url) }) {
   // Preserve Chromium's popup options (including its opener), then enforce our
   // session and security preferences. Never replay popup requests with loadURL:
@@ -20,7 +20,7 @@ function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show
   downloads?.track(window);
   const mail = installMailSso({ contents: window.webContents, ready, report: mailReport });
   universityWindow ??= window;
-  installNavigation({ window, Menu, ready, downloads, universityWindow });
+  installNavigation({ window, Menu, ready, downloads, universityWindow, checkUpdates });
   window.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   const httpsPage = value => { try { return new URL(value).protocol === 'https:' && allowedURL(value); } catch { return false; } };
   const openOutside = async value => {
@@ -65,7 +65,7 @@ function createProtectedWindow({ BrowserWindow, session, prefiller, owners, show
     // submitting a form. Only a university page may create one.
     if (!ready() || !httpsPage(opener) || !(httpsPage(url) || url === 'about:blank')) return { action: 'deny' };
     return { action: 'allow', createWindow: options => {
-      const popup = createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready, Menu, windowOptions: options, universityWindow, mailReport, openExternal });
+      const popup = createProtectedWindow({ BrowserWindow, session, prefiller, owners, show, downloads, ready, Menu, windowOptions: options, universityWindow, mailReport, openExternal, checkUpdates });
       downloads?.expectNavigation(popup.webContents, httpsPage(url) ? url : opener);
       return popup.webContents;
     } };

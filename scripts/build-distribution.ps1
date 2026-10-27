@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'distribution-common.ps1')
 $metadata = Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+if (($metadata.revision -isnot [int] -and $metadata.revision -isnot [long]) -or
+    $metadata.revision -lt 1 -or $metadata.revision -gt 9007199254740991) { throw 'Revision de mise a jour entiere positive attendue.' }
 if ($metadata.version -notmatch '^(\d+)\.(\d+)\.(\d+)-alpha\.(\d+)$') { throw 'Version Alpha SemVer attendue.' }
 $windowsVersion = @($Matches[1],$Matches[2],$Matches[3],$Matches[4]) -join '.'
 $name = 'MyNEIGE-' + $metadata.version + '-win-x64'
@@ -41,10 +43,11 @@ foreach ($file in @('distribution-common.ps1','launch-distribution.ps1','run-dis
     'openvpn-setup.ps1','openvpn-prerequisites.ps1','openvpn-driver-store.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $payload 'scripts')
 }
-$appMetadata = [ordered]@{ name = $metadata.name; version = $metadata.version; description = $metadata.description;
+$appMetadata = [ordered]@{ name = $metadata.name; version = $metadata.version; revision = $metadata.revision; description = $metadata.description;
     author = $metadata.author; license = $metadata.license; homepage = $metadata.homepage; type = 'commonjs'; main = 'src/main/index.js' }
 [IO.File]::WriteAllText((Join-Path $payload 'package.json'), ($appMetadata | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath (Join-Path $root 'docs\ALPHA_TESTER.md') -Destination (Join-Path $payload 'LIRE-MOI.md')
+Copy-Item -LiteralPath (Join-Path $root 'docs\UPDATES.md') -Destination $payload
 $notices = "MyNEIGE $($metadata.version) - Matra DevProd`r`nApache-2.0 : LICENSE`r`n`r`nElectron $($metadata.devDependencies.electron) : resources/runtime/LICENSE`r`nChromium et composants embarques : resources/runtime/LICENSES.chromium.html`r`n`r`nOpenVPN Community et TAP ne sont pas redistribues dans ce paquet.`r`nLeur installateur officiel est telecharge et verifie separement, avec votre accord.`r`nLe profil universitaire est embarque pour cette Alpha a la demande du developpeur.`r`n"
 [IO.File]::WriteAllText((Join-Path $payload 'THIRD-PARTY-NOTICES.txt'), $notices, [Text.UTF8Encoding]::new($false))
 Assert-PlainTree $payload
@@ -71,6 +74,7 @@ if (!$SkipInstaller) {
     }
     if (!(Test-Path -LiteralPath $NsisPath)) { throw 'NSIS absent : installer NSIS ou passer -NsisPath.' }
     $deleteInclude = Join-Path $root '.local\launcher\uninstall-files.nsh'
+    $verifyDeleteInclude = Join-Path $root '.local\launcher\verify-uninstall-files.nsh'
     $deleteLines = @(Get-ChildItem -LiteralPath $payload -Recurse -File | ForEach-Object {
         'Delete "$INSTDIR\' + $_.FullName.Substring($payload.Length + 1) + '"'
     })
@@ -78,8 +82,15 @@ if (!$SkipInstaller) {
         'RMDir "$INSTDIR\' + $_.FullName.Substring($payload.Length + 1) + '"'
     })
     [IO.File]::WriteAllLines($deleteInclude, $deleteLines, [Text.UTF8Encoding]::new($false))
+    $verifyLines = @(Get-ChildItem -LiteralPath $payload -Recurse -File | ForEach-Object {
+        'IfFileExists "$INSTDIR\' + $_.FullName.Substring($payload.Length + 1) + '" 0 +4'
+        '  SetErrorLevel 1'
+        '  MessageBox MB_OK|MB_ICONSTOP "Un fichier MyNEIGE ne peut pas etre supprime. Fermez les programmes qui le retiennent puis recommencez." /SD IDOK'
+        '  Abort'
+    })
+    [IO.File]::WriteAllLines($verifyDeleteInclude, $verifyLines, [Text.UTF8Encoding]::new($false))
     $installer = Join-Path $dist ($name + '-setup.exe')
-    & $NsisPath /INPUTCHARSET UTF8 /V3 "/DAPP_VERSION=$($metadata.version)" "/DWIN_VERSION=$windowsVersion" "/DPAYLOAD=$payload" "/DOUTPUT=$installer" "/DDELETE_INCLUDE=$deleteInclude" (Join-Path $root 'packaging\windows\installer.nsi')
+    & $NsisPath /INPUTCHARSET UTF8 /V3 "/DAPP_VERSION=$($metadata.version)" "/DWIN_VERSION=$windowsVersion" "/DPAYLOAD=$payload" "/DOUTPUT=$installer" "/DDELETE_INCLUDE=$deleteInclude" "/DVERIFY_DELETE_INCLUDE=$verifyDeleteInclude" (Join-Path $root 'packaging\windows\installer.nsi')
     if ($LASTEXITCODE -ne 0) { throw "Compilation NSIS echouee ($LASTEXITCODE)." }
     $artifacts += $installer
 }

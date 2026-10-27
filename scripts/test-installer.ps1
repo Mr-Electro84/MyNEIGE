@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Installer, [Parameter(Mandatory)][string]$ResultFile)
+param([Parameter(Mandatory)][string]$Installer, [Parameter(Mandatory)][string]$ResultFile, [string]$PreviousInstaller)
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -22,7 +22,8 @@ try {
     Assert-Installer ((Run-Installer $Installer '/S') -eq 3) 'Installer did not refuse an active launcher.'
     Assert-Installer (!(Test-Path -LiteralPath $installed)) 'Busy installation wrote files.'
     $mutex.Dispose(); $mutex = $null
-    Assert-Installer ((Run-Installer $Installer '/S') -eq 0) 'Silent installation failed.'
+    $firstInstaller = if ($PreviousInstaller) { $PreviousInstaller } else { $Installer }
+    Assert-Installer ((Run-Installer $firstInstaller '/S') -eq 0) 'Silent installation failed.'
     Assert-Installer (Test-Path -LiteralPath (Join-Path $installed 'MyNEIGE.exe')) 'Installed launcher absent.'
     Assert-Installer (Test-Path -LiteralPath $registry) 'Uninstall registration absent.'
     $shortcuts = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'MyNEIGE'
@@ -32,14 +33,24 @@ try {
     . (Join-Path $installed 'scripts\distribution-common.ps1')
     $null = Test-DistributionPayload $installed; $checks++
     Assert-Installer ((Run-Installer (Join-Path $installed 'MyNEIGE.exe') '--check') -eq 0) 'Installed standalone check failed.'
-    Assert-Installer ((Run-Installer $Installer '/S') -eq 0) 'In-place reinstall failed.'
+    $previousManifest = Get-Content -LiteralPath (Join-Path $installed 'distribution.json') -Raw | ConvertFrom-Json
+    $sentinel = Join-Path $installed 'installer-test-keep.txt'
+    [IO.File]::WriteAllText($sentinel, 'Unlisted user content must survive upgrade and uninstall.')
+    Assert-Installer ((Run-Installer $Installer '/S') -eq 0) 'Previous-version removal and reinstall failed.'
+    $nextManifest = Get-Content -LiteralPath (Join-Path $installed 'distribution.json') -Raw | ConvertFrom-Json
+    foreach ($entry in $previousManifest.files) {
+        if ($entry.path -notin $nextManifest.files.path) {
+            $oldFile = Get-PayloadPath $installed $entry.path
+            Assert-Installer (!(Test-Path -LiteralPath $oldFile)) ('Obsolete installed file survived upgrade: ' + $entry.path)
+        }
+    }
+    Assert-Installer (Test-Path -LiteralPath $sentinel) 'Upgrade deleted unlisted user content.'
+    $null = Test-DistributionPayload $installed; $checks++
     $uninstall = Join-Path $installed 'Uninstall.exe'
     $mutex = [Threading.Mutex]::new($false, 'Global\MyNEIGE-Desktop-v1')
     Assert-Installer ((Run-Installer $uninstall ('/S _?=' + $installed)) -eq 3) 'Uninstaller did not refuse an active launcher.'
     Assert-Installer (Test-Path -LiteralPath (Join-Path $installed 'MyNEIGE.exe')) 'Busy uninstaller deleted files.'
     $mutex.Dispose(); $mutex = $null
-    $sentinel = Join-Path $installed 'installer-test-keep.txt'
-    [IO.File]::WriteAllText($sentinel, 'Unlisted user content must survive uninstall.')
     Assert-Installer ((Run-Installer $uninstall ('/S _?=' + $installed)) -eq 0) 'Uninstall failed.'
     Assert-Installer (!(Test-Path -LiteralPath (Join-Path $installed 'MyNEIGE.exe'))) 'Launcher survived uninstall.'
     Assert-Installer (!(Test-Path -LiteralPath $registry)) 'Uninstall registry survived.'

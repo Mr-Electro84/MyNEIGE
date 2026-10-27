@@ -41,6 +41,7 @@ VIAddVersionKey /LANG=1036 "LegalCopyright" "Matra DevProd - Apache-2.0"
 
 Var MaintenanceMutex
 Var SessionMutex
+Var UpgradeMutex
 !macro AcquireNativeSession
   System::Call 'kernel32::CreateMutexW(p0, i1, w "Global\MyNEIGE-PoC-Session-v1") p.r0 ?e'
   Pop $1
@@ -81,7 +82,79 @@ Function .onInit
   SetShellVarContext all
   ; Fixed protected location: /D cannot redirect an elevated installation.
   StrCpy $INSTDIR "$PROGRAMFILES64\MyNEIGE"
+  ; Ce verrou reste détenu pendant le passage par l'ancien désinstalleur.
+  System::Call 'kernel32::CreateMutexW(p0, i1, w "Global\MyNEIGE-Upgrade-v1") p.r0 ?e'
+  Pop $1
+  ${If} $0 == 0
+  ${OrIf} $1 != 0
+    MessageBox MB_OK|MB_ICONSTOP "Une installation MyNEIGE est déjà en cours." /SD IDOK
+    SetErrorLevel 3
+    Quit
+  ${EndIf}
+  StrCpy $UpgradeMutex $0
   !insertmacro AcquireMaintenance ""
+FunctionEnd
+
+Function RemovePreviousVersion
+  ClearErrors
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyNEIGE" "InstallLocation"
+  ${IfNot} ${Errors}
+    ${If} $0 != "$INSTDIR"
+      MessageBox MB_OK|MB_ICONSTOP "L'ancienne installation MyNEIGE indique un emplacement inattendu. Désinstallez-la manuellement avant de continuer." /SD IDOK
+      SetErrorLevel 2
+      Abort
+    ${EndIf}
+    IfFileExists "$INSTDIR\Uninstall.exe" previous_found previous_missing
+  ${EndIf}
+  ; Détecter aussi une installation dont l'inscription a été perdue.
+  IfFileExists "$INSTDIR\Uninstall.exe" previous_found
+  IfFileExists "$INSTDIR\MyNEIGE.exe" previous_missing previous_done
+previous_missing:
+  MessageBox MB_OK|MB_ICONSTOP "Une ancienne installation est présente, mais son désinstalleur est introuvable. Réparez-la avant de continuer." /SD IDOK
+  SetErrorLevel 2
+  Abort
+previous_found:
+  DetailPrint "Désinstallation de la version précédente de MyNEIGE…"
+  InitPluginsDir
+  ClearErrors
+  CopyFiles /SILENT "$INSTDIR\Uninstall.exe" "$PLUGINSDIR\previous-uninstall.exe"
+  ${If} ${Errors}
+    MessageBox MB_OK|MB_ICONSTOP "Impossible de préparer la désinstallation précédente." /SD IDOK
+    SetErrorLevel 1
+    Abort
+  ${EndIf}
+  ; Les anciens désinstalleurs acquièrent eux-mêmes ces deux verrous.
+  System::Call 'kernel32::CloseHandle(p $SessionMutex)'
+  System::Call 'kernel32::CloseHandle(p $MaintenanceMutex)'
+  StrCpy $SessionMutex 0
+  StrCpy $MaintenanceMutex 0
+  ClearErrors
+  ; _?= doit rester le dernier argument, sans guillemets : ExecWait attend
+  ; alors le vrai désinstalleur au lieu d'un processus de copie temporaire.
+  ExecWait '$\"$PLUGINSDIR\previous-uninstall.exe$\" /S _?=$INSTDIR' $2
+  ${If} ${Errors}
+    StrCpy $2 1
+  ${EndIf}
+  ; Refuser toute écriture si un lanceur ou une session a démarré entre-temps.
+  !insertmacro AcquireMaintenance ""
+  ${If} $2 != 0
+    MessageBox MB_OK|MB_ICONSTOP "La désinstallation précédente a échoué. La nouvelle version ne sera pas installée." /SD IDOK
+    SetErrorLevel 1
+    Abort
+  ${EndIf}
+  IfFileExists "$INSTDIR\MyNEIGE.exe" previous_incomplete
+  IfFileExists "$INSTDIR\Uninstall.exe" previous_incomplete
+  ClearErrors
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\MyNEIGE" "UninstallString"
+  ${IfNot} ${Errors}
+    Goto previous_incomplete
+  ${EndIf}
+  Goto previous_done
+previous_incomplete:
+  MessageBox MB_OK|MB_ICONSTOP "La désinstallation précédente est incomplète. Installation interrompue." /SD IDOK
+  SetErrorLevel 1
+  Abort
+previous_done:
 FunctionEnd
 
 Function un.onInit
@@ -96,6 +169,7 @@ Function un.onInit
 FunctionEnd
 
 Section "MyNEIGE" SEC_MAIN
+  Call RemovePreviousVersion
   SetOutPath "$INSTDIR"
   SetOverwrite on
   File /r "${PAYLOAD}\*"
@@ -126,7 +200,11 @@ Section "Uninstall"
   ${EndIf}
   ; Reacquire before deleting files, including if a development controller raced.
   !insertmacro AcquireNativeSession
+  ClearErrors
   !include "${DELETE_INCLUDE}"
+  ; Les RMDir peuvent échouer sur un fichier personnel conservé : vérifier
+  ; explicitement les fichiers installés, sans suppression récursive.
+  !include "${VERIFY_DELETE_INCLUDE}"
   Delete "$SMPROGRAMS\MyNEIGE\MyNEIGE.lnk"
   Delete "$SMPROGRAMS\MyNEIGE\MyNEIGE - Effacer les données locales.lnk"
   Delete "$SMPROGRAMS\MyNEIGE\Désinstaller MyNEIGE.lnk"

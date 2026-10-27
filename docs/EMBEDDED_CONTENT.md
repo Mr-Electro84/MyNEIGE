@@ -29,6 +29,7 @@ Electron impose les chemins et la provenance des iframes, que les relais CONNECT
 | --- | --- |
 | `partage.univ-avignon.fr` exactement, `renater.fr` et sous-domaines | Connexion habituelle et DNS de cette interface |
 | YouTube/H5P externes et dépendances du tableau ci-dessus | Connexion habituelle et DNS de cette interface, sous réserve du filtrage de contexte Electron |
+| `my-neige.42web.io` exactement (ajout du 27 octobre 2026) | Connexion habituelle et DNS de cette interface ; uniquement les deux appels API dans la session dédiée aux [mises à jour](UPDATES.md) |
 | Autres domaines universitaires : APPIGS, CAS, IdP, ENT, Moodle, Nextcloud, etc. | VPN obligatoire et DNS du tunnel |
 | Domaine non autorisé | Refusé |
 

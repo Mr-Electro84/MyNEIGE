@@ -32,7 +32,9 @@ Diagnostics : `%LOCALAPPDATA%\MyNEIGE\logs` ; journaux protégés de session : `
 
 ## Remplacer ou désinstaller
 
-Fermer MyNEIGE avant toute mise à jour. Installer la nouvelle Alpha par-dessus l’ancienne, ou remplacer le dossier du ZIP complet. L’installateur refuse d’intervenir pendant une session. Conserver une copie du paquet précédent pour revenir à une version antérieure en cas de problème.
+La vérification des mises à jour dans l’application est à venir. **Aide → Vérifier les mises à jour** affiche cette annonce et un bouton **Voir le site web**, qui ouvre le site MyNEIGE dans votre navigateur par défaut. Cette action fonctionne aussi avant la connexion universitaire. Aucun appel automatique à l’API de version n’est effectué actuellement. Voir les [détails des mises à jour](UPDATES.md).
+
+Fermer MyNEIGE avant toute mise à jour. Lancer le nouvel installateur : il désinstalle d’abord l’ancienne version avec son propre inventaire de fichiers, puis installe la nouvelle, en conservant les données locales et les identifiants enregistrés. Pour le ZIP, remplacer le dossier complet. L’installateur refuse d’intervenir pendant une session. Conserver une copie du paquet précédent pour revenir à une version antérieure en cas de problème.
 
 Pour effacer les données locales **avant de désinstaller**, utiliser **MyNEIGE → MyNEIGE - Effacer les données locales** dans le menu Démarrer, ou :
 

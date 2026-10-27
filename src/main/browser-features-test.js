@@ -4,10 +4,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { START_URL } = require('./policy');
 const { createDownloads, safeFilename } = require('./downloads');
+const { createDownloadsWindow } = require('./downloads-window');
 const { navigationFor } = require('./navigation');
 const { protectRequests } = require('./session-policy');
 const { APP_ICON } = require('./app-icon');
-const { nativeImage, dialog } = require('electron');
+const { nativeImage, dialog, BrowserWindow, ipcMain } = require('electron');
 const { embeddedFixture, runEmbeddedTests } = require('./embedded-content-test');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
@@ -48,7 +49,7 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
   const browserSession = session.fromPartition(`features-${Date.now()}`, { cache: false });
   protectRequests(browserSession);
   const payload = pdfFixture();
-  let slowStream, progressDialog = false, popupPosts = 0, externalRequests = 0;
+  let slowStream, popupPosts = 0, externalRequests = 0;
   browserSession.protocol.handle('https', async request => {
     const embedded = embeddedFixture(request);
     if (embedded) return embedded;
@@ -81,8 +82,15 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
       { headers: { 'content-type': 'text/html; charset=utf-8' } });
   });
   await browserSession.cookies.set({ url: 'https://www.appigs.univ-avignon.fr', name: 'fixture-auth', value: 'local-only', secure: true });
+  const downloadsLocal = session.fromPartition(`downloads-local-${Date.now()}`, { cache: false });
+  downloadsLocal.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') }));
+  const fileActions = [];
   const downloads = createDownloads({ session: browserSession, ready: () => true, directory,
-    dialog: { showMessageBox: async (_window, options) => { progressDialog = options.detail.includes('preuve-pilote.pdf'); return { response: 0 }; } } });
+    show: () => downloadsWindow.show(), shell: {
+      openPath: async file => { fileActions.push(['open', file]); return ''; },
+      showItemInFolder: file => { fileActions.push(['reveal', file]); }
+    } });
+  const downloadsWindow = createDownloadsWindow({ BrowserWindow, ipcMain, localSession: downloadsLocal, downloads, show: false });
   const windows = new Set(), track = downloads.track;
   downloads.track = window => { track(window); windows.add(window); };
   // Tests choose a workspace path instead of showing the normal Save As dialog.
@@ -252,7 +260,19 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     if (!fs.readFileSync(path.join(directory, 'preuve-pilote.pdf')).equals(payload)) throw new Error('Downloaded fixture content differs');
     const cookies = await browserSession.cookies.get({ url: 'https://www.appigs.univ-avignon.fr', name: 'fixture-auth' });
     if (cookies.length !== 1 || cookies[0].value !== 'local-only') throw new Error('Download changed the session cookie jar'); ++checks;
-    await downloads.show(window); if (!progressDialog) throw new Error('Download status missing'); ++checks;
+    await downloads.show(window);
+    const downloadView = BrowserWindow.getAllWindows().find(candidate => candidate.getTitle() === 'MyNEIGE · Téléchargements');
+    if (!downloadView || !await downloadView.webContents.executeJavaScript('document.body.textContent.includes("preuve-pilote.pdf")'))
+      throw new Error('Download window missing');
+    const completed = downloads.records()[0];
+    if (!completed.canOpen || !completed.startedAt || !completed.endedAt || completed.received !== payload.length ||
+        await downloadView.webContents.executeJavaScript('typeof require !== "undefined" || typeof process !== "undefined"'))
+      throw new Error('Download metadata or sandbox missing');
+    await downloadView.webContents.executeJavaScript(`window.myneigeDownloads.action('open', ${completed.id})`);
+    await downloadView.webContents.executeJavaScript(`window.myneigeDownloads.action('reveal', ${completed.id})`);
+    if (fileActions.length !== 2 || fileActions.some(([, file]) => file !== path.join(directory, 'preuve-pilote.pdf')))
+      throw new Error('Download actions did not use the saved file');
+    downloadView.destroy(); ++checks;
     // Exercise a real blob download initiated by an anchor in the same renderer.
     await window.webContents.executeJavaScript(`(() => {
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['local blob fixture'], { type: 'text/plain' }));
@@ -324,7 +344,7 @@ async function run({ session, protectedWindow, CasPrefill, directory }) {
     if (named.webContents.getURL() !== popupURL) throw new Error('University menu navigated a popup after initial window closed'); ++checks;
     return checks;
   } finally {
-    downloads.dispose(); prefiller.clear(); for (const child of windows) if (!child.isDestroyed()) child.destroy();
+    downloadsWindow.dispose(); downloads.dispose(); prefiller.clear(); for (const child of windows) if (!child.isDestroyed()) child.destroy();
     try { slowStream?.close(); } catch { /* Cancelled stream may already be closed. */ }
     browserSession.protocol.unhandle('https');
     await browserSession.clearStorageData();

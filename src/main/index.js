@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, session, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, session, Menu, dialog, net: electronNet, shell, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -11,12 +11,16 @@ const { START_URL, allowedURL, validateCredentials } = require('./policy');
 const { CasPrefill, registerCasIPC } = require('./cas-prefill');
 const { createProtectedWindow } = require('./protected-window');
 const { createDownloads } = require('./downloads');
+const { createDownloadsWindow } = require('./downloads-window');
 const { protectRequests } = require('./session-policy');
 const { NativeVault } = require('./native-vault');
 const { APP_ICON } = require('./app-icon');
 const { helpMenu } = require('./about');
 const { networkErrors, networkError, requestMetadata } = require('./network-diagnostics');
 const { createSessionLifecycle } = require('./session-lifecycle');
+const { createUpdateService, createUpdateTransport, UPDATE_CHECK_ENABLED } = require('./updates');
+const { createUpdateToast } = require('./update-toast');
+const metadata = require('../../package.json');
 
 // Network restrictions already exist in WFP before this process starts.
 app.enableSandbox();
@@ -38,7 +42,7 @@ const formPath = path.join(__dirname, '../renderer/index.html');
 const formURL = pathToFileURL(formPath).href;
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
-let vpnReady = false, downloads, sessionLifecycle;
+let vpnReady = false, downloads, downloadsWindow, sessionLifecycle, updates, updateToast, formSession;
 let vault, vaultBusy = false, vaultEpoch = 0, rememberPending, rememberTimer;
 function clearRemember() {
   clearTimeout(rememberTimer); rememberTimer = undefined;
@@ -144,11 +148,12 @@ async function control(line) {
     await testChild(v4, v6);
     send('BROWSER_STAGE CHILD_BLOCKED');
     const localSession = session.fromPartition(`form-${Date.now()}`, { cache: false });
+    formSession = localSession;
     localSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') }));
     form = new BrowserWindow({ title: 'MyNEIGE · Version Alpha', icon: APP_ICON, width: 1120, height: 900, show: !testMode,
       webPreferences: { session: localSession, preload: path.join(__dirname, '../preload/form.js'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
     send('BROWSER_STAGE FORM_CREATED');
-    form.setMenu(Menu.buildFromTemplate([helpMenu(form)]));
+    form.setMenu(Menu.buildFromTemplate([helpMenu(form, undefined, { checkUpdates: manualUpdateCheck })]));
     form.setMenuBarVisibility(true);
     form.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     form.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
@@ -192,6 +197,8 @@ async function control(line) {
     if (!result.available || typeof result.saved !== 'boolean' || typeof result.hello !== 'boolean' || 'password' in result || 'username' in result) throw new Error('Native vault status integration failed');
     send('UI_VAULT_TEST_DONE');
   } else if (line === 'TEST_BROWSER_FEATURES' && form && testMode) {
+    // La fixture possède sa propre fenêtre et son IPC ; libérer ceux du test proxy précédent.
+    downloadsWindow?.dispose(); downloads?.dispose(); downloadsWindow = undefined; downloads = undefined;
     await require('./browser-features-test').run({ session, CasPrefill, directory: path.join(app.getPath('userData'), 'download-fixtures'),
       protectedWindow: (browserSession, prefiller, fixtureDownloads, ready, openExternal) => createProtectedWindow({ BrowserWindow,
         session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, ready, openExternal, show: false }) });
@@ -225,13 +232,17 @@ async function control(line) {
   } else if (line === 'AUTH_REQUIRED' && form) {
     authPending = true; state('AUTH_REQUIRED'); void vaultStatus();
   } else if (parts[0] === 'STATE' && parts.length === 2 && ['BLOCKED', 'ERROR', 'CONNECTING'].includes(parts[1])) {
-    if (parts[1] !== 'CONNECTING') { vpnReady = false; casPrefill.clear(); clearRemember(); downloads?.stop(); }
+    if (parts[1] !== 'CONNECTING') { vpnReady = false; stopUpdates(); casPrefill.clear(); clearRemember(); downloads?.stop(); }
     state(parts[1]);
     if (parts[1] === 'BLOCKED' && remote && !remote.isDestroyed()) remote.destroy();
   } else if (parts[0] === 'VPN_READY' && parts.length === 3 && form && !proxySecret) {
     proxyPort = Number(parts[1]); proxySecret = parts[2];
     if (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535 || !/^[a-f0-9]{64}$/.test(proxySecret)) throw new Error('proxy');
     vpnReady = true;
+    if (!testMode) {
+      try { startUpdates(); }
+      catch { stopUpdates(); } // Le contrôle facultatif ne doit pas arrêter la connexion.
+    }
     if (rememberPending) {
       const credentials = { username: rememberPending.user.toString('utf8'), password: rememberPending.password.toString('utf8') };
       clearRemember();
@@ -297,7 +308,8 @@ async function openProtectedSession() {
   webSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   webSession.setPermissionCheckHandler(() => false);
   downloads = createDownloads({ session: webSession, ready: () => vpnReady && !stopping,
-    directory: app.getPath('downloads'), dialog, report: status => send(`UI_DOWNLOAD ${status}`) });
+    directory: app.getPath('downloads'), show: () => downloadsWindow.show(), report: status => send(`UI_DOWNLOAD ${status}`) });
+  downloadsWindow = createDownloadsWindow({ BrowserWindow, ipcMain, localSession: formSession, downloads, show: !testMode });
   protectRequests(webSession, host => send(`UI_DOMAIN ${host}`), metadata => send(`UI_REQUEST_BLOCKED ${metadata}`));
   const requestErrors = new Set();
   webSession.webRequest.onCompleted(details => {
@@ -325,11 +337,43 @@ async function openProtectedSession() {
 function protectedWindow(browserSession = webSession, prefiller = casPrefill) {
   return createProtectedWindow({ BrowserWindow, session: browserSession, prefiller, owners: prefillOwners, show: !testMode,
     downloads: browserSession === webSession ? downloads : undefined, ready: () => (testMode || vpnReady) && !stopping,
-    mailReport: metadata => send(`UI_MAIL_SSO ${metadata}`) });
+    mailReport: metadata => send(`UI_MAIL_SSO ${metadata}`), checkUpdates: manualUpdateCheck });
 }
+function ensureUpdateToast() {
+  updateToast ??= createUpdateToast({ BrowserWindow, ipcMain, screen, dialog, localSession: formSession,
+    action: choice => updates?.action(choice) ?? { ok: false }, show: !testMode });
+  return updateToast;
+}
+async function manualUpdateCheck() {
+  if (stopping || !form || form.isDestroyed()) return;
+  const toast = ensureUpdateToast();
+  if (!UPDATE_CHECK_ENABLED) { await toast.status('coming'); return; }
+  if (!vpnReady) { await toast.status('unavailable'); return; }
+  try {
+    if (!updates) startUpdates(false);
+    const result = await updates.check({ manual: true });
+    if (['current', 'error'].includes(result.status)) await toast.status(result.status);
+  } catch { await toast.status('error'); }
+}
+function startUpdates(automatic = true) {
+  if (!UPDATE_CHECK_ENABLED) return;
+  if (updates) return;
+  const transport = createUpdateTransport({ net: electronNet,
+    session: session.fromPartition(`updates-${Date.now()}`, { cache: false }),
+    port: proxyPort, secret: proxySecret, ready: () => vpnReady && !stopping });
+  updates = createUpdateService({ installed: metadata, transport,
+    // Le superviseur place userData dans MyNEIGE/browser-data/<session>.
+    preferenceFile: path.resolve(app.getPath('userData'), '../../update-preferences.json'),
+    openExternal: url => shell.openExternal(url), notify: candidate => updateToast.notify(candidate) });
+  ensureUpdateToast();
+  if (automatic) void updates.check();
+}
+function stopUpdates() { updates?.stop(); updates = undefined; updateToast?.dispose(); updateToast = undefined; }
 async function expireSession() {
   vpnReady = false; authPending = false; proxySecret = undefined;
+  stopUpdates();
   ++vaultEpoch; clearRemember(); vault?.stop(); casPrefill.clear(); downloads?.stop();
+  downloadsWindow?.dispose();
   // Le formulaire n'utilise qu'une session locale interdisant le réseau.
   // Détruire aussi les pop-ups et les PDF, pas seulement la fenêtre principale.
   for (const window of BrowserWindow.getAllWindows()) if (window !== form) window.destroy();
@@ -347,9 +391,11 @@ function shutdown(failed = false) {
   if (stopping) return;
   stopping = true; authPending = false; proxySecret = undefined;
   sessionLifecycle?.dispose();
+  stopUpdates();
   ++vaultEpoch; clearRemember(); vault?.stop();
   vpnReady = false; casPrefill.clear();
   downloads?.stop();
+  downloadsWindow?.dispose();
   for (const window of BrowserWindow.getAllWindows()) window.destroy();
   if (webSession) webSession.closeAllConnections().finally(() => app.exit(failed ? 1 : 0)); else app.exit(failed ? 1 : 0);
 }

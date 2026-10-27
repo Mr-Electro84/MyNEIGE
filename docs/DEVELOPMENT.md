@@ -42,8 +42,10 @@ Après `npm ci`, ces commandes utilisent les tests locaux et leurs données fict
 | `npm run test:js` | Tests Node des politiques, de l’IPC, de la navigation et des diagnostics. |
 | `npm run test:cas` | Préremplissage CAS dans Electron. |
 | `npm run test:browser` | Navigation, téléchargements, PDF et contenus intégrés dans Electron. |
+| `npm run test:downloads` | Fenêtre locale des téléchargements, métadonnées, actions système simulées, fichiers absents, IPC et arrêt de session. |
 | `npm run test:mail` | Parcours SSO Mail/PARTAGE avec réponses TLS locales, sans authentification réelle. |
 | `npm run test:session` | Avertissement local, prolongation et écran de fin de session dans Electron, avec échéance simulée. |
+| `npm run test:updates` | API simulée derrière un proxy authentifié, toast local, actions IPC et préférence de rappel. |
 
 Ces scénarios ciblés ne remplacent pas un test sous confinement WFP ni une recette réseau réelle. La confiance TLS particulière de la fixture Mail reste limitée à la session de test et n’est pas installée dans Windows.
 
@@ -113,9 +115,10 @@ La console interactive demande les identifiants localement. Ne jamais fournir de
 | Retour d’authentification PARTAGE : diagnostics sans données d’authentification et reprise HTTPS unique du parcours reconnu | [Retour d’authentification PARTAGE](EMBEDDED_CONTENT.md#retour-dauthentification-partage). |
 | Enregistrement facultatif DPAPI, vérification Windows Hello et préparation d’OpenVPN | [Identifiants et OpenVPN](J2_CREDENTIALS_SETUP.md). |
 | Cache Electron protégé, vérification native des empreintes et réduction des processus PowerShell au démarrage | [Performances de démarrage](STARTUP_PERFORMANCE.md). Les chemins de session WFP restent distincts. |
+| Version, révision, toast de mise à jour, appel API hors VPN et remplacement NSIS | [Mises à jour](UPDATES.md). |
 | Icônes des fenêtres, pop-ups, exécutables et raccourcis | [Ressources graphiques](J2_NAVIGATION_DOWNLOADS.md#icône-electron) et [distribution](ALPHA_DISTRIBUTION.md). |
 
-Le menu **Navigation** propose Précédent, Suivant et Accueil APPIGS. **Fichiers → Téléchargements** (`Ctrl+J`) affiche le suivi et l’annulation ; les fichiers ne sont jamais ouverts automatiquement. Le menu **Université** conserve la fenêtre principale et sa session, sans garantir une authentification automatique auprès de chaque service.
+Le menu **Navigation** propose Précédent, Suivant et Accueil APPIGS. **Fichiers → Téléchargements** (`Ctrl+J`) ouvre une fenêtre non bloquante avec le nom enregistré, le poids, la date, la progression et l’annulation. Un fichier terminé peut être ouvert ou sélectionné dans son dossier Windows par un clic explicite. Fermer cette fenêtre laisse les transferts continuer ; l’historique récent reste en mémoire pour la session. Le menu **Université** conserve la fenêtre principale et sa session, sans garantir une authentification automatique auprès de chaque service.
 
 Les liens HTTP/HTTPS vers les domaines extérieurs à la liste de navigation s’ouvrent dans le navigateur par défaut, depuis la fenêtre principale comme depuis un pop-up universitaire. Les adresses universitaires ou RENATER refusées ne sont jamais déléguées ; les ressources intégrées, téléchargements et redirections hors politique restent filtrés. Voir les [règles des liens externes](J2_NAVIGATION_DOWNLOADS.md#liens-externes).
 

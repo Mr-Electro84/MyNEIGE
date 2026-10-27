@@ -88,6 +88,13 @@ int selfTest() {
                     !universityHost("127.0.0.1") && !universityHost("a..univ-avignon.fr"),
                 "University scope mismatch");
     });
+    test("API de mise à jour limitée au nom exact et au relais public", [] {
+        require(browserHost("my-neige.42web.io") && publicServiceHost("my-neige.42web.io"),
+                "Update API must use the public relay");
+        for (const auto &host : {"42web.io", "other.42web.io", "www.my-neige.42web.io",
+                                "my-neige.42web.io.evil.test", "my-neige.42web.io."})
+            require(!browserHost(host), "Update host scope escaped");
+    });
     test("browser scope admits RENATER and embedded learning dependencies only", [] {
         for (const auto &host : {"partage.univ-avignon.fr", "cloud.univ-avignon.fr", "sp.partage.renater.fr",
                                  "webmail.partage.renater.fr", "www.youtube.com", "www.youtube-nocookie.com",

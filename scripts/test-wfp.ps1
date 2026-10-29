@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$Elevate, [switch]$ElevatedChild, [ValidateSet('wfp-test','adapter-test','auth-preflight','management-test','privilege-test','browser-test','public-network-test','all')][string]$TestCommand = 'wfp-test')
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -25,9 +25,9 @@ $result = @()
 $nativeCode = 0
 foreach ($command in $commands) {
     if ($ElevatedChild) {
-        $result += & $binary $command --profile (Join-Path $repoRoot 'VPN_Universite_Avignon.ovpn') --project-root $repoRoot 2>&1 | Tee-Object -FilePath $resultFile -Append
+        $result += & $binary $command --profile (Join-Path $repoRoot 'tests/fixtures/synthetic.ovpn') --project-root $repoRoot 2>&1 | Tee-Object -FilePath $resultFile -Append
     } else {
-        $result += & $binary $command --profile (Join-Path $repoRoot 'VPN_Universite_Avignon.ovpn') --project-root $repoRoot 2>&1
+        $result += & $binary $command --profile (Join-Path $repoRoot 'tests/fixtures/synthetic.ovpn') --project-root $repoRoot 2>&1
     }
     $nativeCode = $LASTEXITCODE
     if ($nativeCode -ne 0) { break }

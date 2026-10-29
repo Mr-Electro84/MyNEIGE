@@ -11,7 +11,7 @@ struct PushOptions {
 bool isCipherFailure(const std::string &line);
 std::string safeDiagnostic(const std::string &line);
 struct Options {
-    std::filesystem::path profile = L"VPN_Universite_Avignon.ovpn";
+    std::filesystem::path profile;
     std::filesystem::path openvpn = L"C:\\Program Files\\OpenVPN\\bin\\openvpn.exe";
     std::vector<uint32_t> dns;
     uint32_t gateway = 0;

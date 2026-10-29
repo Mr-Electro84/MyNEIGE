@@ -45,6 +45,10 @@ button:disabled { opacity: .55; cursor: default; }
 .secondary:hover:enabled { background: #eef0fb; border-color: var(--brand-periwinkle); }
 .note { font-size: 13px; line-height: 1.65; }
 .vault { margin-top: 14px; padding-top: 8px; border-top: 1px solid #dce1f2; }
+.vpn-profile { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.vpn-profile h3 { margin: 12px 0; }
+.vpn-profile p { margin: 8px 0; font-size: 13px; }
+.vpn-profile button { padding: 9px 12px; font-size: 13px; }
 .vault .note { margin-bottom: 6px; }
 .vault .secondary { padding: 11px 14px; font-size: 14px; }
 .remember { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; font-weight: 400; color: var(--muted); }

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$CheckOnly, [switch]$BrowserTest, [switch]$ForgetCredentials, [switch]$ResetUserData)
 $ErrorActionPreference = 'Stop'
 $startupClock = [Diagnostics.Stopwatch]::StartNew()
@@ -66,7 +66,7 @@ try {
     $logName = 'session-' + [Guid]::NewGuid().ToString('N') + '.txt'
     $command = if ($BrowserTest) { 'distribution-test' } else { 'distribution-browse' }
     $arguments = @($command,'--project-root',('"' + $root + '"'),'--log-name',$logName)
-    if (!$BrowserTest) { $arguments += @('--profile',('"' + (Join-Path $root 'VPN_Universite_Avignon.ovpn') + '"'),'--openvpn',('"' + $result.Path + '"')) }
+    if (!$BrowserTest) { $arguments += @('--openvpn',('"' + $result.Path + '"')) }
     try {
         $worker = Start-Process -FilePath $binary -ArgumentList $arguments -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $root
     } catch {

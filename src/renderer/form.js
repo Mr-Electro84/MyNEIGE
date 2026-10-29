@@ -7,6 +7,33 @@ const state = document.getElementById('state');
 const remember = document.getElementById('remember'), savedConnect = document.getElementById('saved-connect');
 const forget = document.getElementById('forget'), vaultText = document.getElementById('vault-state');
 let authReady = false, busy = false, vault = { available: false, saved: false, hello: false };
+const profileImport = document.getElementById('profile-import'), profileDelete = document.getElementById('profile-delete');
+const profileText = document.getElementById('profile-state');
+const profileMessages = {
+  READY: 'Profil personnel prêt. Sa copie locale est chiffrée pour votre compte Windows.',
+  EMPTY: 'Importez votre profil personnel pour activer la connexion.',
+  INVALID: 'Profil non pris en charge ou invalide. Le profil précédent est conservé.',
+  ERROR: 'Profil indisponible. Réimportez votre fichier ; aucune connexion ne sera tentée.'
+};
+function updateProfile(value) {
+  profileImport.disabled = !value.available || value.busy || value.locked || busy;
+  profileDelete.disabled = profileImport.disabled || !value.present;
+  profileImport.textContent = value.present ? 'Remplacer le profil' : 'Importer un profil';
+  profileText.textContent = value.locked ? 'Profil utilisé pour cette session. Relancez MyNEIGE pour le modifier.' :
+    value.busy ? 'Validation du profil…' : profileMessages[value.message] || profileMessages[value.ready ? 'READY' : 'EMPTY'];
+}
+window.myneige.onProfileState(updateProfile);
+window.myneige.profileStatus().then(updateProfile).catch(() => updateProfile({ available: false, message: 'ERROR' }));
+profileImport.addEventListener('click', async () => {
+  profileImport.disabled = true; profileDelete.disabled = true;
+  try { updateProfile(await window.myneige.importProfile()); }
+  catch { updateProfile({ ...await window.myneige.profileStatus(), message: 'ERROR' }); }
+});
+profileDelete.addEventListener('click', async () => {
+  profileImport.disabled = true; profileDelete.disabled = true;
+  try { updateProfile(await window.myneige.deleteProfile()); }
+  catch { updateProfile({ ...await window.myneige.profileStatus(), message: 'ERROR' }); }
+});
 function refreshVault() {
   savedConnect.disabled = !authReady || busy || !vault.available || !vault.saved || !vault.hello;
   forget.disabled = !vault.available || !vault.saved;
@@ -19,7 +46,7 @@ const vaultMessages = {
   SAVE_FAILED: 'Enregistrement impossible. La connexion continue sans nouvel enregistrement.',
   DELETE_FAILED: 'Suppression impossible. Les identifiants ne sont pas annoncés comme supprimés.',
   DENIED: 'Vérification Windows Hello annulée ou refusée. Vous pouvez saisir vos identifiants.',
-  UNAVAILABLE: 'Coffre ou Windows Hello indisponible. La saisie manuelle reste possible.'
+  UNAVAILABLE: 'Enregistrement ou Windows Hello indisponible pour ce profil. Saisissez vos identifiants ; un ancien enregistrement peut nécessiter une nouvelle saisie et un nouvel enregistrement.'
 };
 function updateVault(value) {
   vault = { ...vault, ...value };
@@ -31,6 +58,7 @@ function updateVault(value) {
 window.myneige.onVaultState(updateVault);
 window.myneige.vaultStatus().then(updateVault).catch(() => updateVault({ available: false }));
 const messages = Object.freeze({
+  PROFILE_REQUIRED: 'Importez un profil VPN personnel valide avant de vous connecter.',
   AUTH_REQUIRED: 'Saisissez vos identifiants VPN ou utilisez votre enregistrement avec Windows Hello.',
   CONNECTING: 'Connexion au VPN universitaire…',
   READY: 'VPN connecté. La fenêtre APPIGS utilise le tunnel.',

@@ -4,7 +4,9 @@ MyNEIGE rassemble les services de l’Université d’Avignon dans une applicati
 
 L’application démarre le VPN universitaire et facilite la connexion aux services depuis une même fenêtre. Vos autres applications continuent d’utiliser leur connexion Internet habituelle.
 
-**Version actuelle : 1.0.2-alpha.1 · Windows 11 x64 (Intel / AMD) · Licence Apache 2.0**
+**Diffusion suspendue depuis le 29 octobre 2026.** Le dépôt reste privé pendant le retrait de la configuration VPN et la purge de son historique. Aucun ancien paquet ne doit être redistribué. Une [alerte Defender pendant la validation](docs/SECURITY_CLEANUP.md) bloque actuellement les essais natifs.
+
+**Version actuelle : 1.0.2-alpha.1 · Révision 2 · Windows 11 x64 (Intel / AMD) · Licence Apache 2.0**
 
 ## Ce que propose MyNEIGE
 
@@ -30,10 +32,13 @@ Si vous disposez d’un paquet MyNEIGE fourni par le développeur :
 
 1. Installez la version `.exe`, ou extrayez **tout** le ZIP portable dans un dossier local et ouvrez `MyNEIGE.exe`.
 2. Lancez l’application normalement. Si OpenVPN Community manque, MyNEIGE propose son installation et vous demande votre accord.
-3. Saisissez vos identifiants universitaires, ou réutilisez ceux enregistrés avec Windows Hello.
-4. Une fois le VPN prêt, confirmez la connexion sur la page universitaire préremplie, puis utilisez le menu Université.
+3. Importez dans le formulaire votre propre fichier OpenVPN, téléchargé personnellement sur le site officiel de la DOSI. Aucun profil n’est fourni par MyNEIGE.
+4. Saisissez vos identifiants universitaires, ou réutilisez ceux enregistrés pour ce profil avec Windows Hello.
+5. Une fois le VPN prêt, confirmez la connexion sur la page universitaire préremplie, puis utilisez le menu Université.
 
 Les paquets prêts à l’emploi ne nécessitent ni Node.js ni outils de compilation. Ils ne sont pas inclus dans un clone du dépôt. Le [site de présentation](https://my-neige.42web.io/) présente les formats proposés ; ses liens de téléchargement nécessitent un hébergement avec les paquets correspondants.
+
+Le [guide du profil personnel](docs/VPN_PROFILE.md) décrit l’import, la conservation chiffrée et les limites de compatibilité.
 
 Consultez le [guide d’utilisation de l’Alpha](docs/ALPHA_TESTER.md) pour l’installation, les diagnostics, les mises à jour et la désinstallation.
 
@@ -82,7 +87,7 @@ Les tests de base peuvent être exécutés sans compte universitaire et sans con
 npm test
 ```
 
-Cette commande recompile le contrôleur, exécute les tests natifs et JavaScript, teste le coffre avec des données fictives et inspecte le profil VPN. Elle ne démontre pas à elle seule l’isolation réseau réelle.
+Cette commande recompile le contrôleur, exécute les tests natifs et JavaScript, teste le coffre avec des données fictives et inspecte un profil VPN fictif. Elle utilise uniquement un profil synthétique et ne démontre pas à elle seule l’isolation réseau réelle.
 
 Les tests du navigateur, les recettes nécessitant UAC, les diagnostics et les commandes avancées figurent dans le [guide de développement](docs/DEVELOPMENT.md).
 

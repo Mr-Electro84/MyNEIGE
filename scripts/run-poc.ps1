@@ -1,5 +1,5 @@
-[CmdletBinding()]
-param(
+﻿[CmdletBinding()]
+param([string]$Profile,
     [ValidateSet('inspect','self-test','wfp-test','adapter-test','auth-preflight','management-test','connect','cleanup')][string]$Mode = 'inspect',
     [string]$OpenVpn = 'C:\Program Files\OpenVPN\bin\openvpn.exe',
     [string[]]$VpnDns = @(),
@@ -13,7 +13,8 @@ if (!(Test-Path -LiteralPath $binary)) { & (Join-Path $PSScriptRoot 'build-poc.p
 if (!(Test-Path -LiteralPath $binary)) { throw 'Le pilote doit etre compile avant execution.' }
 $nativeArgs = @($Mode)
 if ($Mode -in @('inspect','connect','adapter-test','auth-preflight','management-test')) {
-    $nativeArgs += @('--profile', (Join-Path $repoRoot 'VPN_Universite_Avignon.ovpn'), '--openvpn', $OpenVpn)
+    if (!$Profile) { throw 'Fournir -Profile avec le chemin du profil personnel.' }
+    $nativeArgs += @('--profile', $Profile, '--openvpn', $OpenVpn)
     foreach ($server in $VpnDns) { $nativeArgs += @('--dns', $server) }
     if ($VpnGateway) { $nativeArgs += @('--gateway', $VpnGateway) }
     $nativeArgs += @('--seconds', [string]$Seconds)

@@ -18,3 +18,8 @@ dist/
 *.pcap
 *.pcapng
 *.cap
+
+# Les profils personnels restent hors du dépôt ; seule la fixture fictive est admise.
+*.ovpn
+!tests/fixtures/synthetic.ovpn
+*.dpapi

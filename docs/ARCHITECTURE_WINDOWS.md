@@ -49,3 +49,7 @@ IPv6 applicatif est bloqué ; IPv6 de l’hôte reste actif. Les sondes UDP ne c
 - [Chromium : blocage de résolution et exclusion du proxy](https://new.chromium.org/developers/design-documents/network-stack/socks-proxy/).
 
 Les preuves exécutées et leurs limites figurent dans [POC_STATUS.md](POC_STATUS.md).
+
+## Profil personnel
+
+Le formulaire local importe un profil fourni par l’utilisateur. Un auxiliaire sans élévation le valide et conserve sa copie chiffrée DPAPI sous le compte interactif. Le contrôleur valide indépendamment le contenu transmis par son pipe authentifié avant de lancer OpenVPN. Aucune configuration d’Avignon n’est reconnue ou embarquée ; TLS reste vérifié avec la CA importée. L’empreinte du profil normalisé lie les identifiants mémorisés à ce profil. Voir [VPN_PROFILE.md](VPN_PROFILE.md).

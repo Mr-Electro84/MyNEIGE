@@ -122,7 +122,8 @@ std::string BrowserPilot::poll() {
         DWORD got = pipeIo(channel.h, buffer, std::min<DWORD>(available, sizeof(buffer)), false);
         pending.append(buffer, got);
         SecureZeroMemory(buffer, sizeof(buffer));
-        require(pending.size() <= 16384, "Browser IPC frame too large");
+        const size_t limit = pending.rfind("UI_PROFILE ", 0) == 0 ? 131110u : 16384u;
+        require(pending.size() <= limit, "Browser IPC frame too large");
     }
 }
 std::string BrowserPilot::wait(DWORD milliseconds) {
@@ -204,8 +205,8 @@ void BrowserPilot::launch(Firewall &firewall, bool selfTest) {
                  "sandbox=true proxy_only=true"
               << std::endl;
 }
-static std::string decodeCredential(const std::string &encoded) {
-    require(!encoded.empty() && encoded.size() <= 8192 && encoded.size() % 2 == 0, "Invalid credential frame size");
+static std::string decodeCredential(const std::string &encoded, bool profile = false) {
+    require(!encoded.empty() && encoded.size() <= (profile ? 131070u : 8192u) && encoded.size() % 2 == 0, "Invalid frame size");
     std::string value;
     value.reserve(encoded.size() / 2);
     auto digit = [](char c) -> unsigned {
@@ -217,7 +218,8 @@ static std::string decodeCredential(const std::string &encoded) {
     };
     for (size_t i = 0; i < encoded.size(); i += 2) {
         unsigned c = digit(encoded[i]) * 16 + digit(encoded[i + 1]);
-        require(c >= 32 && c != 127, "Credential contains a control character");
+        require((c >= 32 && c != 127) || (profile && (c == '\n' || c == '\r' || c == '\t')),
+                "Frame contains a control character");
         value += static_cast<char>(c);
     }
     return value;
@@ -273,6 +275,48 @@ void BrowserPilot::proxyTest(Firewall &firewall) {
     require(result == "UI_NAV_PROXY_DONE", "Chromium did not report the intentional test transport closure");
     firewall.revokeBrowserProxy(executable.wstring());
     std::cout << "BROWSER_CHROMIUM_PROXY authenticated=true tls_client_hello=true no_remote_network=true" << std::endl;
+}
+std::string BrowserPilot::profile() {
+    send("PROFILE_REQUIRED\n");
+    std::string selected, selectedId;
+    for (;;) {
+        auto line = poll();
+        if (line.empty()) {
+            require(child.running(), "Browser closed during profile selection");
+            Sleep(30);
+            continue;
+        }
+        if (line == "UI_STOP") throw std::runtime_error("Cancelled in browser");
+        require(line.rfind("UI_ERROR ", 0) != 0, "Browser initialization failed");
+        if (line.rfind("UI_PROFILE", 0) != 0) continue;
+        auto fields = split(line, ' ');
+        wipe(line);
+        require(fields.size() >= 2 && fields[1].size() <= 9 && !fields[1].empty() &&
+                    fields[1].find_first_not_of("0123456789") == std::string::npos, "Invalid profile request ID");
+        const auto id = fields[1];
+        if (fields[0] == "UI_PROFILE_START") {
+            require(fields.size() == 2 && id == selectedId && !selected.empty(), "Profile not accepted");
+            send("PROFILE_LOCKED " + id + "\n");
+            return selected;
+        }
+        if (fields[0] == "UI_PROFILE_CLEAR") {
+            require(fields.size() == 2, "Invalid profile deletion frame");
+            wipe(selected); selectedId.clear();
+            send("PROFILE_CLEARED " + id + "\n");
+            continue;
+        }
+        require(fields[0] == "UI_PROFILE" && fields.size() == 3, "Invalid profile frame");
+        try {
+            auto source = decodeCredential(fields[2], true);
+            auto normalized = normalizeProfile(source);
+            wipe(source); wipe(fields[2]);
+            selected = std::move(normalized); selectedId = id;
+            send("PROFILE_ACCEPTED " + id + " " + sha256Text(selected) + "\n");
+        } catch (...) {
+            wipe(fields[2]);
+            send("PROFILE_REJECTED " + id + "\n");
+        }
+    }
 }
 std::pair<std::string, std::string> BrowserPilot::credentials() {
     send("AUTH_REQUIRED\n");

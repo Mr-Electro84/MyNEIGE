@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([Parameter(Mandatory)][string]$LogName, [switch]$BrowserTest, [string]$OpenVpn)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -20,7 +20,7 @@ if (Test-Path -LiteralPath $log) { throw 'Diagnostic deja present.' }
 $binary = Join-Path $root 'bin\myneige-controller.exe'
 $ErrorActionPreference = 'Continue'
 if ($BrowserTest) { & $binary browser-test --project-root $root *> $log }
-else { & $binary browse --project-root $root --profile (Join-Path $root 'VPN_Universite_Avignon.ovpn') --openvpn $OpenVpn *> $log }
+else { & $binary browse --project-root $root --openvpn $OpenVpn *> $log }
 $code = $LASTEXITCODE
 # Closing the credential form before submitting is a normal cancellation.
 if ($code -ne 0 -and (Select-String -LiteralPath $log -SimpleMatch 'ERROR: Cancelled in browser' -Quiet)) { $code = 0 }

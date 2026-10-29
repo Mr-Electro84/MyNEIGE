@@ -11,6 +11,7 @@ struct BrowserPilot {
     void prepare(const Staging &staging, const std::filesystem::path &projectRoot);
     void launch(Firewall &firewall, bool selfTest = false);
     void proxyTest(Firewall &firewall);
+    std::string profile();
     std::pair<std::string, std::string> credentials();
     void ready(Firewall &firewall, uint16_t port, const std::string &token);
     void state(const std::string &value);

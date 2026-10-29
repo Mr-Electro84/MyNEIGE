@@ -21,7 +21,7 @@ class NativeVault {
       const timer = setTimeout(() => { child.kill(); finish(true); }, 120000);
       child.stdout.on('data', chunk => {
         size += chunk.length;
-        if (size > 17050) { chunk.fill(0); child.kill(); finish(true); } else chunks.push(chunk);
+        if (size > (command === 'PROFILE_READ' ? 131100 : 17050)) { chunk.fill(0); child.kill(); finish(true); } else chunks.push(chunk);
       });
       // Never forward native stderr, command frames or credential responses to logs.
       child.stderr.on('data', chunk => chunk.fill(0));
@@ -44,16 +44,16 @@ class NativeVault {
     if (!match) throw new Error('VAULT_UNAVAILABLE');
     return { saved: match[1] === 'PRESENT', hello: match[2] === 'AVAILABLE' };
   }
-  async save(credentials) {
-    if (!validateCredentials(credentials)) throw new Error('VAULT_UNAVAILABLE');
+  async save(credentials, fingerprint) {
+    if (!validateCredentials(credentials) || !/^[A-F0-9]{64}$/.test(fingerprint || '')) throw new Error('VAULT_UNAVAILABLE');
     const user = Buffer.from(credentials.username), password = Buffer.from(credentials.password);
     try {
-      if (await this.request(`WRITE ${user.toString('hex')} ${password.toString('hex')}`) !== 'OK') throw new Error('VAULT_UNAVAILABLE');
+      if (await this.request(`WRITE ${user.toString('hex')} ${password.toString('hex')} ${fingerprint}`) !== 'OK') throw new Error('VAULT_UNAVAILABLE');
     } finally { user.fill(0); password.fill(0); }
   }
-  async unlock(handle) {
-    if (typeof handle !== 'bigint' || handle <= 0n) throw new Error('VAULT_UNAVAILABLE');
-    const response = await this.request(`UNLOCK ${handle}`);
+  async unlock(handle, fingerprint) {
+    if (typeof handle !== 'bigint' || handle <= 0n || !/^[A-F0-9]{64}$/.test(fingerprint || '')) throw new Error('VAULT_UNAVAILABLE');
+    const response = await this.request(`UNLOCK ${handle} ${fingerprint}`);
     if (response === 'DENIED') return null;
     const match = /^CREDENTIALS ([a-f0-9]{2,8192}) ([a-f0-9]{2,8192})$/.exec(response);
     if (!match || match[1].length % 2 || match[2].length % 2) throw new Error('VAULT_UNAVAILABLE');
@@ -65,6 +65,18 @@ class NativeVault {
     } finally { user.fill(0); password.fill(0); }
   }
   async forget() { if (await this.request('DELETE') !== 'OK') throw new Error('VAULT_UNAVAILABLE'); }
+  async readProfile() {
+    const response = await this.request('PROFILE_READ');
+    if (response === 'PROFILE_EMPTY') return null;
+    const match = /^PROFILE ([a-f0-9]{2,131070})$/.exec(response);
+    if (!match || match[1].length % 2) throw new Error('PROFILE_UNAVAILABLE');
+    return Buffer.from(match[1], 'hex');
+  }
+  async saveProfile(source) {
+    if (!Buffer.isBuffer(source) || !source.length || source.length >= 65536) throw new Error('PROFILE_UNAVAILABLE');
+    if (await this.request(`PROFILE_WRITE ${source.toString('hex')}`) !== 'OK') throw new Error('PROFILE_UNAVAILABLE');
+  }
+  async forgetProfile() { if (await this.request('PROFILE_DELETE') !== 'OK') throw new Error('PROFILE_UNAVAILABLE'); }
   cancelActive() { this.active?.kill(); }
   stop() { this.stopped = true; this.cancelActive(); }
 }

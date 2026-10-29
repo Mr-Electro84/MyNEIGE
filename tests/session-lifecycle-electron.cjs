@@ -19,6 +19,7 @@ app.whenReady().then(async () => {
   const localSession = session.fromPartition('session-lifecycle-local', { cache: false });
   localSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('file:') }));
   ipcMain.handle('myneige:vault-status', () => ({ available: false, saved: false, hello: false }));
+  ipcMain.handle('myneige:profile-status', () => ({ available: false, present: false, ready: false }));
   const form = new BrowserWindow({ show: false, width: 1120, height: 900, webPreferences: { session: localSession,
     preload: path.resolve(__dirname, '../src/preload/form.js'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
   await form.loadFile(path.resolve(__dirname, '../src/renderer/index.html'));

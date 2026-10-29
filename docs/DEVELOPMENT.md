@@ -26,12 +26,12 @@ Les commandes disponibles et leur implémentation font référence dans [package
 
 ```powershell
 npm test
-npm run poc:inspect
+npm run poc:inspect -- -Profile "C:\chemin\personnel.ovpn"
 ```
 
-`npm test` recompile le contrôleur, exécute les tests de protocole natif, le test DPAPI avec des données fictives, l’inspection du profil fourni et les tests Node. Il ne démarre pas de VPN universitaire et ne nécessite pas d’identifiants réels. Le test DPAPI utilise néanmoins la protection Windows du compte local.
+`npm test` recompile le contrôleur, exécute les tests de protocole natif, le test DPAPI avec des données fictives, l’inspection du profil synthétique et les tests Node. Il ne démarre pas de VPN universitaire et ne nécessite pas d’identifiants réels. Le test DPAPI utilise néanmoins la protection Windows du compte local.
 
-`npm run poc:inspect` lit le profil et les paramètres réseau sans démarrer OpenVPN ni installer de règle. Conserver intact le fichier source `VPN_Universite_Avignon.ovpn` ; le profil d’exécution est reconstruit depuis les directives admises.
+`npm run poc:inspect -- -Profile "C:\chemin\personnel.ovpn"` lit le profil et les paramètres réseau sans démarrer OpenVPN ni installer de règle. Le chemin est obligatoire ; le fichier personnel reste intact et le profil d’exécution est reconstruit depuis les directives admises. Voir [le profil personnel](VPN_PROFILE.md).
 
 ### Tests JavaScript et navigateur ciblés
 
@@ -99,7 +99,7 @@ Cette commande peut télécharger puis installer OpenVPN avec UAC. Une installat
 Pour le mode console de l’essai réseau :
 
 ```powershell
-npm run poc:live
+npm run poc:live -- -Profile "C:\chemin\personnel.ovpn"
 ```
 
 La console interactive demande les identifiants localement. Ne jamais fournir de mot de passe dans le chat, les arguments de commande ou un journal. Pour les captures et les scénarios de perte de route, VPN, relais ou contrôleur, suivre le [guide réseau](POC_WINDOWS.md) et le [rapport de validation](POC_STATUS.md).
@@ -150,6 +150,10 @@ Le README décrit l’état actuel du projet. Les rapports datés conservent les
 
 La construction d’un standalone ou d’un paquet distribuable exige l’accord explicite préalable du mainteneur, conformément à [AGENTS.md](../AGENTS.md). Les commandes `npm run dist:win` et `npm run dist:dir` ne font pas partie des vérifications ordinaires en développement.
 
-Après accord, le [guide de distribution](ALPHA_DISTRIBUTION.md) décrit les prérequis C++/SDK/NSIS, le dossier autonome, le ZIP portable, l’installateur et les empreintes SHA-256 générés dans `dist/`. Le profil VPN est embarqué pour cette Alpha et les paquets sont actuellement non signés. `npm run test:dist` vérifie le contenu livré ; la recette du paquet reste distincte de celle des sources.
+Après accord, le [guide de distribution](ALPHA_DISTRIBUTION.md) décrit les prérequis C++/SDK/NSIS, le dossier autonome, le ZIP portable, l’installateur et les empreintes SHA-256 générés dans `dist/`. Aucun profil VPN ne doit être embarqué ; la distribution reste suspendue pendant l’assainissement. Les paquets précédents sont non signés. `npm run test:dist` vérifie le contenu livré ; la recette du paquet reste distincte de celle des sources.
 
 Le site se trouve dans `website/`, avec une feuille CSS séparée et sans dépendance externe. Son [guide](../website/README.md) décrit la prévisualisation, la préparation des liens et l’hébergement. Les paquets ne sont pas versionnés avec le site : un clone ne contient pas ses téléchargements.
+
+## Retrait de la configuration VPN et alerte Defender
+
+Consulter le [compte rendu de sécurité du 29 octobre 2026](SECURITY_CLEANUP.md) avant tout nouvel essai natif. La validation native est interrompue par une détection Defender sur le contrôleur et sa copie de coffre ; les résultats antérieurs ne lèvent pas ce blocage. Ne pas restaurer ni relancer les fichiers détectés pour poursuivre la recette.

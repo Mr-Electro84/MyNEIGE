@@ -156,13 +156,31 @@ int selfTest() {
         rejects([&] { relayConfiguration(network, {0x01010101}, "partage.univ-avignon.fr", token, "public"); });
     });
     const std::string base =
-        "dev tun\nclient\nremote vpn.example.test 443 tcp-client\nauth-user-pass\nremote-cert-tls "
-        "server\nncp-ciphers AES-128-GCM:AES-128-CBC\nauth SHA256\n<ca>\n-----BEGIN CERTIFICATE-----\nYWJj\n-----END "
-        "CERTIFICATE-----\n</ca>\n";
+        "client\ndev tun\nremote vpn.example.test 8443 tcp-client\nauth-user-pass\nremote-cert-tls "
+        "server\nncp-ciphers AES-256-GCM:AES-256-CBC\nauth SHA512\n<ca>\n"
+        "-----BEGIN CERTIFICATE-----\n"
+        "MIIC2TCCAcGgAwIBAgIBATANBgkqhkiG9w0BAQsFADAkMSIwIAYDVQQDDBlNeU5F\n"
+        "SUdFIHN5bnRoZXRpYyB0ZXN0IENBMB4XDTI2MTAyODE5NDI1OFoXDTM2MTAyNjE5\n"
+        "NDI1OFowJDEiMCAGA1UEAwwZTXlORUlHRSBzeW50aGV0aWMgdGVzdCBDQTCCASIw\n"
+        "DQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANowRhyk9pETBtBc6qc7dkUNffX4\n"
+        "aajNCfrdwmmnHgqWwhI99z7A9sbTwlfmVoE5GSmuF3Y4SIrGFLmZK5nlwyp+DSzM\n"
+        "65xIsyAOn0sO+wY8Lw6DUXunvPJKgAD4szVjrQIVI1vConwxvZx9uwyDDoxA7+m6\n"
+        "gcJS6/Btpd0pHlrYZZ5O6CTA2tn4s/+RhoIuoWawS0XBPEQEa3l1rQ4ITnIWXucy\n"
+        "qYhQnLNPAXQeH/wiSoTgA/8xIeAxADvuzMGl2tWKwr9pkBWKiFOxlVcpekFB0nYL\n"
+        "zO6QWadUBJ0eLaaGS031QKTBpLv6xT+YjbNl3bDcQnYaM47e6qek7LtepwECAwEA\n"
+        "AaMWMBQwEgYDVR0TAQH/BAgwBgEB/wIBADANBgkqhkiG9w0BAQsFAAOCAQEAdw2M\n"
+        "DuAzSGDXcZ2WtHGP0lOvevuGmRnab9sxpJVsoasHvwpyMCSpx1ABnO0Rjnn7OWB7\n"
+        "DNRkUUPS1f+Fvz68qOCTYa/wt2RHXFP8IOsY0RAx83OjcC7pehCddohXtL0tyqs0\n"
+        "JVBGjKlDMUqhMS+s/oeCRix37u50EjULWJUq5/b7yh765aK24CB8n9F6is/cueJz\n"
+        "VUbhAmzppfrgtHH53noC9NmuWV6s950wzW6eyz3KTO+8hAQjINn36OobsDjuc8rq\n"
+        "6jwKAPX8MVUeQBfrBEy4OEHuMLe29D5EKcBjZz8kon57iFsbKqr0dDJ2uBs0+lqw\n"
+        "iUGv2xRb2N9048kEVw==\n"
+        "-----END CERTIFICATE-----\n"
+        "</ca>\n";
     test("profile regeneration", [&] {
         auto result = normalizeProfile(base);
         require(result.find("route-noexec\n") != std::string::npos &&
-                    result.find("data-ciphers AES-128-GCM:AES-128-CBC") != std::string::npos &&
+                    result.find("data-ciphers AES-256-GCM:AES-256-CBC") != std::string::npos &&
                     result.find("ncp-ciphers") == std::string::npos && result.find("persist-tun") == std::string::npos,
                 "Unsafe profile output");
     });
@@ -171,6 +189,39 @@ int selfTest() {
         rejects([&] { normalizeProfile(base + "remote attacker.test 443 tcp-client\n"); });
         rejects([&] { normalizeProfile(base + "config extra.ovpn\n"); });
         rejects([&] { normalizeProfile(base + "auth-user-pass passwords.txt\n"); });
+    });
+    test("profil indépendant du serveur, du port et de la CA", [&] {
+        auto changed = base;
+        const auto at = changed.find("vpn.example.test 8443");
+        changed.replace(at, std::string("vpn.example.test 8443").size(), "other.example.test 1194");
+        const auto normalized = normalizeProfile(changed);
+        require(normalized.find("remote other.example.test 1194\n") != std::string::npos,
+                "Server-specific validation remains");
+        require(sha256Text(normalized) != sha256Text(normalizeProfile(base)), "Profile identity did not change");
+    });
+    test("directives dangereuses et transports non pris en charge refusés", [&] {
+        for (const auto *directive : {"plugin evil.dll", "down evil.exe", "script-security 3", "redirect-gateway def1",
+                "dhcp-option DNS 1.1.1.1", "management 127.0.0.1 1234", "ca other.pem", "cert client.pem",
+                "key client.key", "proto udp", "route 0.0.0.0 0.0.0.0", "auth none"})
+            rejects([&] { normalizeProfile(base + directive + "\n"); });
+        for (const auto *remote : {"vpn.example.test 0 tcp-client", "vpn.example.test 65536 tcp-client",
+                "vpn.example.test 443 udp", "vpn.example.test 443 tcp-client extra"}) {
+            auto changed = base;
+            const auto at = changed.find("vpn.example.test 8443 tcp-client");
+            changed.replace(at, std::string("vpn.example.test 8443 tcp-client").size(), remote);
+            rejects([&] { normalizeProfile(changed); });
+        }
+        rejects([&] { normalizeProfile(std::string(65536, 'x')); });
+        rejects([&] { normalizeProfile(base + std::string(1, '\0')); });
+    });
+    test("le profil utilisateur ne peut affaiblir la vérification TLS", [&] {
+        auto changed = base;
+        const auto at = changed.find("remote-cert-tls server");
+        changed.erase(at, std::string("remote-cert-tls server\n").size());
+        rejects([&] { normalizeProfile(changed); });
+        changed = base;
+        changed.replace(changed.find("-----BEGIN CERTIFICATE-----"), 27, "-----BEGIN PRIVATE KEY-----");
+        rejects([&] { normalizeProfile(changed); });
     });
     test("profile malformed inline data rejected", [&] {
         rejects([&] { normalizeProfile(base + "<ca>\n"); });

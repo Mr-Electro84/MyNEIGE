@@ -14,6 +14,7 @@ const { createDownloads } = require('./downloads');
 const { createDownloadsWindow } = require('./downloads-window');
 const { protectRequests } = require('./session-policy');
 const { NativeVault } = require('./native-vault');
+const { createVpnProfile, registerProfileIPC } = require('./vpn-profile');
 const { APP_ICON } = require('./app-icon');
 const { helpMenu } = require('./about');
 const { networkErrors, networkError, requestMetadata } = require('./network-diagnostics');
@@ -43,7 +44,7 @@ const formURL = pathToFileURL(formPath).href;
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
 let vpnReady = false, downloads, downloadsWindow, sessionLifecycle, updates, updateToast, formSession;
-let vault, vaultBusy = false, vaultEpoch = 0, rememberPending, rememberTimer;
+let vault, profile, vaultBusy = false, vaultEpoch = 0, rememberPending, rememberTimer;
 function clearRemember() {
   clearTimeout(rememberTimer); rememberTimer = undefined;
   rememberPending?.user.fill(0); rememberPending?.password.fill(0); rememberPending = undefined;
@@ -141,6 +142,19 @@ async function control(line) {
     if (![v4, v6].every(port => Number.isInteger(port) && port > 0 && port <= 65535)) throw new Error('ports');
     testMode = parts[3] === 'test';
     vault = new NativeVault(path.resolve(__dirname, '../../../myneige-vault.exe'));
+    profile = createVpnProfile({ helper: vault, send, unavailable: () => stopping,
+      invalidate: () => { ++vaultEpoch; clearRemember(); casPrefill.clear(); vault.cancelActive(); },
+      notify: value => {
+        if (!form || form.isDestroyed()) return;
+        form.webContents.send('myneige:profile-state', value);
+        authPending = value.ready;
+        if (!value.locked) state(value.ready ? 'AUTH_REQUIRED' : 'PROFILE_REQUIRED');
+      } });
+    registerProfileIPC(ipcMain, { trusted, profile, selectFile: async () => {
+      const result = await dialog.showOpenDialog(form, { title: 'Importer votre profil VPN personnel',
+        properties: ['openFile', 'dontAddToRecent'], filters: [{ name: 'Profil OpenVPN', extensions: ['ovpn'] }] });
+      return result.canceled ? undefined : result.filePaths[0];
+    } });
     await app.whenReady();
     send('BROWSER_STAGE APP_READY');
     await quarantineTests(v4, v6);
@@ -229,8 +243,16 @@ async function control(line) {
     sessionLifecycle.extended();
   } else if (line === 'SESSION_EXPIRED' && sessionLifecycle) {
     await sessionLifecycle.expire();
+  } else if (line === 'PROFILE_REQUIRED' && form) {
+    void profile.load().catch(() => { state('PROFILE_REQUIRED'); });
+  } else if (['PROFILE_ACCEPTED', 'PROFILE_REJECTED', 'PROFILE_CLEARED'].includes(parts[0])) {
+    profile.reply(parts);
+  } else if (parts[0] === 'PROFILE_LOCKED' && parts.length === 2) {
+    if (!profile.status().locked) throw new Error('profile-lock');
   } else if (line === 'AUTH_REQUIRED' && form) {
-    authPending = true; state('AUTH_REQUIRED'); void vaultStatus();
+    if (profile?.status().locked) state('CONNECTING');
+    else { authPending = true; state('AUTH_REQUIRED'); }
+    void vaultStatus();
   } else if (parts[0] === 'STATE' && parts.length === 2 && ['BLOCKED', 'ERROR', 'CONNECTING'].includes(parts[1])) {
     if (parts[1] !== 'CONNECTING') { vpnReady = false; stopUpdates(); casPrefill.clear(); clearRemember(); downloads?.stop(); }
     state(parts[1]);
@@ -246,7 +268,7 @@ async function control(line) {
     if (rememberPending) {
       const credentials = { username: rememberPending.user.toString('utf8'), password: rememberPending.password.toString('utf8') };
       clearRemember();
-      try { await vault.save(credentials); await vaultStatus('SAVED'); }
+      try { await vault.save(credentials, profile.fingerprint()); await vaultStatus('SAVED'); }
       catch { vaultState({ message: 'SAVE_FAILED' }); }
       finally { credentials.username = ''; credentials.password = ''; }
     }
@@ -265,7 +287,7 @@ function submitCredentials(credentials) {
 }
 ipcMain.handle('myneige:connect', (event, credentials, remember = false) => {
   if (!trusted(event) || !authPending || vaultBusy || typeof remember !== 'boolean' || !validateCredentials(credentials)) throw new Error('Soumission refusée.');
-  clearRemember();
+  profile.start(); clearRemember();
   if (remember) {
     rememberPending = { user: Buffer.from(credentials.username), password: Buffer.from(credentials.password) };
     rememberTimer = setTimeout(clearRemember, 180000); rememberTimer.unref();
@@ -279,11 +301,11 @@ ipcMain.handle('myneige:vault-unlock', async event => {
   try {
     const bytes = form.getNativeWindowHandle();
     const handle = bytes.length === 8 ? bytes.readBigUInt64LE() : BigInt(bytes.readUInt32LE());
-    const credentials = await vault.unlock(handle);
+    const credentials = await vault.unlock(handle, profile.fingerprint());
     if (!credentials) return { connected: false, message: 'DENIED' };
     try {
       if (epoch !== vaultEpoch || stopping || !trusted(event) || !authPending) return { connected: false, message: 'DENIED' };
-      submitCredentials(credentials); return { connected: true };
+      vaultBusy = false; profile.start(); submitCredentials(credentials); return { connected: true };
     } finally { credentials.username = ''; credentials.password = ''; }
   } catch { return { connected: false, message: 'UNAVAILABLE' }; }
   finally { vaultBusy = false; }
@@ -372,7 +394,7 @@ function stopUpdates() { updates?.stop(); updates = undefined; updateToast?.disp
 async function expireSession() {
   vpnReady = false; authPending = false; proxySecret = undefined;
   stopUpdates();
-  ++vaultEpoch; clearRemember(); vault?.stop(); casPrefill.clear(); downloads?.stop();
+  ++vaultEpoch; clearRemember(); profile?.stop(); vault?.stop(); casPrefill.clear(); downloads?.stop();
   downloadsWindow?.dispose();
   // Le formulaire n'utilise qu'une session locale interdisant le réseau.
   // Détruire aussi les pop-ups et les PDF, pas seulement la fenêtre principale.
@@ -392,7 +414,7 @@ function shutdown(failed = false) {
   stopping = true; authPending = false; proxySecret = undefined;
   sessionLifecycle?.dispose();
   stopUpdates();
-  ++vaultEpoch; clearRemember(); vault?.stop();
+  ++vaultEpoch; clearRemember(); profile?.stop(); vault?.stop();
   vpnReady = false; casPrefill.clear();
   downloads?.stop();
   downloadsWindow?.dispose();

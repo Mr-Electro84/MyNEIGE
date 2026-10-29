@@ -114,10 +114,14 @@ std::string safeDiagnostic(const std::string &line) {
     return {};
 }
 static std::string readTextFile(const std::filesystem::path &path) {
+    require(!path.empty(), "Explicit --profile path required");
     std::ifstream input(path, std::ios::binary);
     require(bool(input), "Cannot read VPN profile");
-    std::string value((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    require(value.size() <= 65536, "VPN profile too large");
+    std::string value(65536, '\0');
+    input.read(value.data(), static_cast<std::streamsize>(value.size()));
+    const auto count = input.gcount();
+    require(count > 0 && count < 65536 && !input.bad(), "VPN profile empty, unreadable or too large");
+    value.resize(static_cast<size_t>(count));
     return value;
 }
 static std::string consoleSecret(const char *prompt) {
@@ -544,22 +548,19 @@ int connectSession(const Options &options) {
     require(options.seconds >= 1 && options.seconds <= (options.browserMode ? browserSessionSeconds : 60u), "Invalid pilot duration");
     auto mutex = sessionMutex();
     validateOpenVpn(options.openvpn);
-    auto config = normalizeProfile(readTextFile(options.profile));
+    auto config = options.browserMode ? std::string{} : normalizeProfile(readTextFile(options.profile));
     Socket localTestServer;
     if (options.localManagementTest) {
         uint16_t localPort = 0;
         localTestServer = loopbackListener(localPort);
-        const std::string original = "remote vpn.example.test 443\n";
-        auto position = config.find(original);
+        auto position = config.find("\nremote ");
         require(position != std::string::npos, "Local management fixture cannot find normalized remote");
-        config.replace(position, original.size(), "remote 127.0.0.1 " + std::to_string(localPort) + "\n");
+        ++position;
+        config.replace(position, config.find('\n', position) - position,
+                       "remote 127.0.0.1 " + std::to_string(localPort));
     }
     auto baseline = NetworkSnapshot::capture();
     Staging staging;
-    {
-        std::ofstream file(staging.profile, std::ios::binary);
-        require(bool(file) && bool(file << config), "Cannot write protected public VPN configuration");
-    }
     Job job;
     Child openvpn, relay;
     // Choix figé avant la création du tunnel ; aucun proxy/DNS système modifié.
@@ -614,6 +615,11 @@ int connectSession(const Options &options) {
             std::cout << "STARTUP_BROWSER_PREPARED elapsed_ms=" << GetTickCount64() - startupStarted << std::endl;
             browser->launch(firewall);
             std::cout << "STARTUP_FORM_READY elapsed_ms=" << GetTickCount64() - startupStarted << std::endl;
+            config = browser->profile();
+        }
+        {
+            std::ofstream file(staging.profile, std::ios::binary);
+            require(bool(file) && bool(file << config), "Cannot write protected VPN configuration");
         }
         uint16_t managementPort = 0;
         auto listener = loopbackListener(managementPort);

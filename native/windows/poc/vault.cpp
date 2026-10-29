@@ -1,4 +1,5 @@
 #include "platform.hpp"
+#include "startup.hpp"
 #include <shlobj.h>
 #include <tlhelp32.h>
 #include <wincrypt.h>
@@ -16,7 +17,7 @@ struct Secret {
     }
 };
 static Bytes decodeHex(const std::string &text) {
-    require(!text.empty() && text.size() <= 16384 && text.size() % 2 == 0, "Invalid secret size");
+    require(!text.empty() && text.size() <= 131070 && text.size() % 2 == 0, "Invalid encoded size");
     Bytes result;
     auto digit = [](char c) -> unsigned {
         if (c >= '0' && c <= '9')
@@ -85,14 +86,8 @@ static bool present(const std::filesystem::path &file) {
     require(!(attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)), "Unsafe vault file");
     return true;
 }
-static void save(const std::filesystem::path &file, const Bytes &user, const Bytes &password) {
-    validateSecret(user);
-    validateSecret(password);
-    Secret clear;
-    clear.bytes = {'M', 'N', 'V', '1', static_cast<BYTE>(user.size() >> 8), static_cast<BYTE>(user.size())};
-    clear.bytes.insert(clear.bytes.end(), user.begin(), user.end());
-    clear.bytes.insert(clear.bytes.end(), password.begin(), password.end());
-    auto encrypted = protect(clear.bytes, true);
+static void saveEncrypted(const std::filesystem::path &file, const Bytes &clear) {
+    auto encrypted = protect(clear, true);
     const auto temporary = file.parent_path() / (L"vault-" + wide(randomHex(16)) + L".tmp");
     try {
         Handle output(
@@ -112,7 +107,7 @@ static void save(const std::filesystem::path &file, const Bytes &user, const Byt
         throw;
     }
 }
-static void load(const std::filesystem::path &file, Secret &user, Secret &password) {
+static Bytes loadEncrypted(const std::filesystem::path &file) {
     require(present(file), "Vault absent");
     Handle input(CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                              FILE_FLAG_OPEN_REPARSE_POINT, nullptr));
@@ -120,21 +115,43 @@ static void load(const std::filesystem::path &file, Secret &user, Secret &passwo
     BY_HANDLE_FILE_INFORMATION info{};
     require(GetFileInformationByHandle(input.h, &info) &&
                 !(info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) &&
-                info.nFileSizeHigh == 0 && info.nFileSizeLow > 0 && info.nFileSizeLow <= 32768,
+                info.nFileSizeHigh == 0 && info.nFileSizeLow > 0 && info.nFileSizeLow <= 131072,
             "Invalid vault file");
     Bytes encrypted(info.nFileSizeLow);
     DWORD done = 0;
     require(ReadFile(input.h, encrypted.data(), static_cast<DWORD>(encrypted.size()), &done, nullptr) &&
                 done == encrypted.size(),
             "Cannot read complete vault");
+    return protect(encrypted, false);
+}
+static bool fingerprintValid(const std::string &value) {
+    return value.size() == 64 && value.find_first_not_of("0123456789ABCDEF") == std::string::npos;
+}
+static void save(const std::filesystem::path &file, const Bytes &user, const Bytes &password,
+                 const std::string &fingerprint) {
+    validateSecret(user);
+    validateSecret(password);
+    require(fingerprintValid(fingerprint), "Missing profile binding");
     Secret clear;
-    clear.bytes = protect(encrypted, false);
-    require(clear.bytes.size() >= 8 && std::equal(clear.bytes.begin(), clear.bytes.begin() + 4, "MNV1"),
+    clear.bytes = {'M', 'N', 'V', '2', static_cast<BYTE>(user.size() >> 8), static_cast<BYTE>(user.size())};
+    clear.bytes.insert(clear.bytes.end(), fingerprint.begin(), fingerprint.end());
+    clear.bytes.insert(clear.bytes.end(), user.begin(), user.end());
+    clear.bytes.insert(clear.bytes.end(), password.begin(), password.end());
+    saveEncrypted(file, clear.bytes);
+}
+static void load(const std::filesystem::path &file, Secret &user, Secret &password,
+                 const std::string &fingerprint) {
+    require(fingerprintValid(fingerprint), "Missing profile binding");
+    Secret clear;
+    clear.bytes = loadEncrypted(file);
+    require(clear.bytes.size() >= 72 && std::equal(clear.bytes.begin(), clear.bytes.begin() + 4, "MNV2"),
             "Unsupported vault format");
+    require(std::equal(clear.bytes.begin() + 6, clear.bytes.begin() + 70, fingerprint.begin()),
+            "Credentials belong to another profile");
     size_t length = static_cast<size_t>(clear.bytes[4]) * 256 + clear.bytes[5];
-    require(length > 0 && length <= 4096 && clear.bytes.size() > length + 6, "Invalid vault contents");
-    user.bytes.assign(clear.bytes.begin() + 6, clear.bytes.begin() + 6 + length);
-    password.bytes.assign(clear.bytes.begin() + 6 + length, clear.bytes.end());
+    require(length > 0 && length <= 4096 && clear.bytes.size() > length + 70, "Invalid vault contents");
+    user.bytes.assign(clear.bytes.begin() + 70, clear.bytes.begin() + 70 + length);
+    password.bytes.assign(clear.bytes.begin() + 70 + length, clear.bytes.end());
     validateSecret(user.bytes);
     validateSecret(password.bytes);
 }
@@ -186,12 +203,30 @@ int vaultWorker() {
             "Unexpected credential caller");
         char c = 0;
         while (std::cin.get(c) && c != '\n') {
-            require(command.size() < 17000, "Vault request too large");
+            require(command.size() < (command.rfind("PROFILE_WRITE ", 0) == 0 ? 131100u : 17100u), "Helper request too large");
             command += c;
         }
         require(c == '\n', "Incomplete vault request");
         const auto file = vaultPath();
-        if (command == "STATUS") {
+        const auto profileFile = file.parent_path() / L"vpn-profile.dpapi";
+        if (command == "PROFILE_READ") {
+            if (!present(profileFile)) std::cout << "PROFILE_EMPTY\n";
+            else {
+                Secret source;
+                source.bytes = loadEncrypted(profileFile);
+                (void)normalizeProfile(std::string(source.bytes.begin(), source.bytes.end()));
+                std::cout << "PROFILE " << encodeHex(source.bytes) << "\n";
+            }
+        } else if (command == "PROFILE_DELETE") {
+            forget(profileFile);
+            std::cout << "OK\n";
+        } else if (command.rfind("PROFILE_WRITE ", 0) == 0) {
+            Secret source;
+            source.bytes = decodeHex(command.substr(14));
+            (void)normalizeProfile(std::string(source.bytes.begin(), source.bytes.end()));
+            saveEncrypted(profileFile, source.bytes);
+            std::cout << "OK\n";
+        } else if (command == "STATUS") {
             bool available = false;
             try {
                 available = helloAvailable();
@@ -205,7 +240,8 @@ int vaultWorker() {
         } else if (command.rfind("WRITE ", 0) == 0) {
             auto fields = split(command, ' ');
             wipe(command);
-            require(fields.size() == 3, "Invalid save request");
+            require(fields.size() == 4 && fingerprintValid(fields[3]), "Invalid save request");
+            const auto fingerprint = fields[3];
             Secret user, password;
             try {
                 user.bytes = decodeHex(fields[1]);
@@ -217,10 +253,12 @@ int vaultWorker() {
             }
             for (auto &field : fields)
                 wipe(field);
-            save(file, user.bytes, password.bytes);
+            save(file, user.bytes, password.bytes, fingerprint);
             std::cout << "OK\n";
         } else if (command.rfind("UNLOCK ", 0) == 0) {
-            const auto value = command.substr(7);
+            const auto fields = split(command, ' ');
+            require(fields.size() == 3 && fingerprintValid(fields[2]), "Profile binding required");
+            const auto &value = fields[1];
             require(!value.empty() && value.size() <= 20 && value.find_first_not_of("0123456789") == std::string::npos,
                     "Invalid owner");
             auto owner = reinterpret_cast<HWND>(static_cast<uintptr_t>(std::stoull(value)));
@@ -229,7 +267,7 @@ int vaultWorker() {
                 return 0;
             }
             Secret user, password;
-            load(file, user, password);
+            load(file, user, password, fields[2]);
             auto frame = "CREDENTIALS " + encodeHex(user.bytes) + " " + encodeHex(password.bytes) + "\n";
             std::cout << frame;
             wipe(frame);
@@ -252,17 +290,32 @@ int vaultSelfTest() {
     try {
         require(!present(file), "Unexpected fixture file");
         Bytes user{'f', 'i', 'c', 't', 'i', 'f'}, password{'t', 'e', 's', 't', '-', 's', 'e', 'u', 'l'};
-        save(file, user, password);
+        const auto fingerprint = sha256Text("profil fictif");
+        save(file, user, password, fingerprint);
         Secret readUser, readPassword;
-        load(file, readUser, readPassword);
+        load(file, readUser, readPassword, fingerprint);
         require(readUser.bytes == user && readPassword.bytes == password, "DPAPI roundtrip failed");
+        bool wrongProfileRefused = false;
+        try { load(file, readUser, readPassword, sha256Text("autre profil")); }
+        catch (...) { wrongProfileRefused = true; }
+        require(wrongProfileRefused, "Cross-profile credential reuse accepted");
+        saveEncrypted(file, Bytes{'M', 'N', 'V', '1', 0, 1, 'a', 'b'});
+        bool legacyRefused = false;
+        try { load(file, readUser, readPassword, fingerprint); }
+        catch (...) { legacyRefused = true; }
+        require(legacyRefused, "Unbound legacy credentials accepted");
+        const auto profileFile = directory / L"profile.dpapi";
+        const Bytes profileBytes{'p', 'r', 'o', 'f', 'i', 'l', '\n'};
+        saveEncrypted(profileFile, profileBytes);
+        require(loadEncrypted(profileFile) == profileBytes, "Profile persistence failed");
+        forget(profileFile);
         {
             std::ofstream corrupt(file, std::ios::binary | std::ios::trunc);
             corrupt << "invalid fixture";
         }
         bool refused = false;
         try {
-            load(file, readUser, readPassword);
+            load(file, readUser, readPassword, fingerprint);
         } catch (...) {
             refused = true;
         }
@@ -271,7 +324,7 @@ int vaultSelfTest() {
         forget(file);
         require(!present(file), "Vault deletion failed");
         std::filesystem::remove(directory);
-        std::cout << "VAULT_TEST dpapi=true tamper_refused=true deletion=true no_real_credentials=true\n";
+        std::cout << "VAULT_TEST dpapi=true profile_persistence=true profile_binding=true legacy_refused=true tamper_refused=true deletion=true no_real_credentials=true\n";
         return 0;
     } catch (...) {
         DeleteFileW(file.c_str());

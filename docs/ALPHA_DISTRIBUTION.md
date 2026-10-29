@@ -1,8 +1,10 @@
 # Distribution Alpha Windows
 
-Les formats de distribution sont implémentés pour **Windows 11 x64**. Le profil VPN universitaire est embarqué à la demande du développeur. Le lanceur natif, le dossier autonome, le ZIP et l’installateur NSIS sont construits localement ; la publication reste une étape distincte.
+Les formats de distribution sont implémentés pour **Windows 11 x64**. La diffusion est suspendue depuis le 29 octobre 2026. Aucun profil VPN ne doit être inclus dans les futurs paquets. Les anciens résultats de recette ci-dessous concernent des paquets retirés et ne valident pas cette évolution. Le lanceur natif, le dossier autonome, le ZIP et l’installateur NSIS sont construits localement ; la publication reste une étape distincte.
 
 ## Construire et utiliser
+
+Ces commandes nécessitent un accord explicite préalable ; elles ne font pas partie de la validation de cette correction.
 
 ```powershell
 npm ci
@@ -12,13 +14,29 @@ npm run test:dist
 
 Prérequis de construction : Windows x64, Node.js/npm, Visual Studio Build Tools C++/SDK Windows et NSIS (`makensis.exe` sur PATH ou installation standard). Pour une installation NSIS personnalisée : `powershell -NoProfile -File scripts/build-distribution.ps1 -NsisPath 'C:\chemin\makensis.exe'`. `npm run dist:dir` produit le dossier et le ZIP sans installateur. Les deux exécutables natifs utilisent le runtime MSVC statique (`/MT`), avec icône et ressources de version.
 
-Sorties sous `dist` : dossier `MyNEIGE-1.0.1-alpha.1-win-x64`, archive `MyNEIGE-1.0.1-alpha.1-win-x64-portable.zip`, installateur `MyNEIGE-1.0.1-alpha.1-win-x64-setup.exe` et `MyNEIGE-1.0.1-alpha.1-win-x64-SHA256SUMS.txt`. Le paquet inclut un guide `LIRE-MOI.md` issu du [guide testeur](ALPHA_TESTER.md), les notices tierces et un manifeste SHA-256 par fichier. Il est actuellement **non signé**.
+Sorties sous `dist` : dossier `MyNEIGE-1.0.2-alpha.1-win-x64`, archive `MyNEIGE-1.0.2-alpha.1-win-x64-portable.zip`, installateur `MyNEIGE-1.0.2-alpha.1-win-x64-setup.exe` et `MyNEIGE-1.0.2-alpha.1-win-x64-SHA256SUMS.txt`. Le paquet inclut un guide `LIRE-MOI.md` issu du [guide testeur](ALPHA_TESTER.md), les notices tierces et un manifeste SHA-256 par fichier. Il est actuellement **non signé**.
 
 Le lanceur `MyNEIGE.exe`, à intégrité normale, utilise un seul Windows PowerShell 5.1 fourni avec Windows. Les empreintes du paquet sont vérifiées par le contrôleur natif ; la préparation OpenVPN s'exécute dans le même processus PowerShell, puis l'UAC démarre directement le contrôleur. Celui-ci écrit ses diagnostics dans un répertoire administratif protégé. Electron reste non administrateur ; ses binaires sont réutilisés depuis un cache protégé et reliés au staging propre à chaque session, avec les contrôles WFP existants. Aucun Node.js/npm ni compilation du programme chez le testeur. Les données utilisateur sont sous `%LOCALAPPDATA%\MyNEIGE`, les diagnostics administratifs sous `%PROGRAMDATA%\MyNEIGE-Logs`. Le ZIP conserve ces dépendances système et emplacements de données ; il ne s’agit pas d’une application sans traces. Voir [les corrections et mesures de démarrage](STARTUP_PERFORMANCE.md).
 
 L’installateur utilise l’emplacement fixe protégé `%ProgramFiles%\MyNEIGE`, crée les raccourcis du menu Démarrer et une entrée de désinstallation. Il conserve OpenVPN et les données utilisateur ; un raccourci séparé propose leur suppression avec confirmation **avant** désinstallation. L’installateur et le lanceur se verrouillent mutuellement ; les sessions natives sont aussi réservées pendant la copie/suppression. La désinstallation récupère les seules protections MyNEIGE résiduelles et supprime une liste explicite de fichiers, sans suppression récursive du dossier d’installation.
 
 La construction utilise **NSIS directement** et le runtime Electron épinglé. Aucun electron-builder n’est nécessaire. Les choix ci-dessous décrivent l’implémentation ; la recette sur VM propre reste à effectuer avant diffusion élargie.
+
+## Construction 1.0.2-alpha.1 — 28 octobre 2026
+
+La version est `1.0.2-alpha.1`, avec la révision de livraison **2** dans `package.json`, recopiée dans le paquet pour le futur système de mise à jour. Les ressources des deux exécutables natifs portent cette version ; leur version numérique Windows est `1.0.2.1`. Electron reste épinglé à 45.0.0, sans changement de dépendances.
+
+Vérifications locales réalisées pour cette version :
+
+- Compilation du contrôleur et du lanceur x64 réussie.
+- Dossier autonome, ZIP portable et installateur NSIS générés ; version de l'installateur et deux empreintes du fichier `SHA256SUMS` vérifiées.
+- `npm test` réussi : 38 tests de protocole natif, coffre DPAPI avec données fictives, inspection du profil embarqué et 79 tests JavaScript.
+- Tests Electron réussis : 9 cas CAS sans soumission automatique, 48 contrôles navigateur, 7 contrôles Mail sur boucle locale, fenêtre des téléchargements, renouvellement/expiration de session et mises à jour avec API simulée.
+- 46 contrôles de préparation OpenVPN réussis, sans installation.
+- `npm run test:dist` réussi : 35 contrôles du contenu livré, dont intégrité, métadonnées, architecture x64 et rejet de corruption.
+- ZIP extrait dans un chemin avec espaces et accents : intégrité des 125 fichiers et métadonnées `version=1.0.2-alpha.1`, `revision=2` vérifiées. `MyNEIGE.exe --check` réussit avec Node.js/npm retirés du `PATH`, OpenVPN étant déjà prêt sur ce poste.
+
+Electron et le test DPAPI ont nécessité une exécution hors du bac à sable. NSIS a également nécessité ce contexte après l'erreur de chargement de DLL système déjà observée pour la version précédente. Aucun compte universitaire n'a été utilisé. Les précontrôles WFP avec UAC, le lancement interactif `npm start`, le parcours VPN réel, l'installation/remplacement/désinstallation et la recette sur Windows propre ne sont pas rejoués pour cette construction. Ces validations restent distinctes des tests locaux ci-dessus ; les paquets restent non signés.
 
 ## Construction 1.0.1-alpha.1 — 25 octobre 2026
 
@@ -83,9 +101,9 @@ Pour le ZIP, ajouter extraction dans un répertoire utilisateur, relocalisation 
 
 ## Formats disponibles et limites
 
-Le développement intègre désormais un [signalement des mises à jour](UPDATES.md) par API, avec révision dans `package.json` et toast. L’installation reste manuelle. Le nouvel installateur exécute d’abord le désinstalleur précédent, puis copie la nouvelle version ; le désinstalleur précédent nettoie les fichiers de son inventaire. La recette de ce parcours nécessite deux paquets et reste distincte des résultats historiques ci-dessus.
+Le [signalement des mises à jour](UPDATES.md) par API est préparé, avec révision dans `package.json` et toast, mais temporairement désactivé en attendant un hébergement compatible. Le menu Aide affiche l’annonce de la fonctionnalité à venir et un lien vers le site. L’installation reste manuelle. Le nouvel installateur exécute d’abord le désinstalleur précédent, puis copie la nouvelle version ; le désinstalleur précédent nettoie les fichiers de son inventaire. La recette de ce parcours nécessite deux paquets et reste distincte des résultats historiques ci-dessus.
 
-La construction produit le **dossier standalone, l’installateur NSIS Windows x64 et l’archive ZIP issue du même dossier**, avec profil embarqué. Le portable mono-fichier, les mises à jour automatiques et Linux ne sont pas pris en charge. La publication et la diffusion aux testeurs sont des étapes distinctes.
+La construction produit le **dossier standalone, l’installateur NSIS Windows x64 et l’archive ZIP issue du même dossier**, sans profil embarqué. Le portable mono-fichier, les mises à jour automatiques et Linux ne sont pas pris en charge. La publication et la diffusion aux testeurs sont des étapes distinctes.
 
 ## Références techniques
 

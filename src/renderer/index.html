@@ -39,6 +39,13 @@
     </section>
     <section class="login-panel" aria-labelledby="login-title">
       <h2 id="login-title">Connexion</h2>
+      <section class="vpn-profile" aria-labelledby="profile-title">
+        <h3 id="profile-title">Profil VPN</h3>
+        <p class="note">Téléchargez personnellement votre fichier OpenVPN depuis le site officiel de la DOSI, puis importez-le ici. MyNEIGE ne fournit aucun profil et ne certifie pas sa provenance.</p>
+        <p id="profile-state" role="status" aria-live="polite">Vérification du profil local…</p>
+        <button id="profile-import" class="secondary" type="button" disabled>Importer un profil</button>
+        <button id="profile-delete" class="secondary" type="button" disabled>Supprimer le profil local</button>
+      </section>
       <p class="login-intro">Utilisez vos identifiants universitaires.</p>
       <form id="credentials" autocomplete="off">
         <label for="username">Identifiant universitaire</label>

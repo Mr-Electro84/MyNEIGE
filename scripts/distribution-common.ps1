@@ -1,4 +1,4 @@
-# Shared by the installed launcher, its worker and distribution tests.
+﻿# Shared by the installed launcher, its worker and distribution tests.
 # npm or a native intermediary can inherit PowerShell 7's PSModulePath. Import
 # the inbox utility module from the interpreter actually running this script.
 Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
@@ -16,6 +16,10 @@ function Get-PayloadPath([string]$Root, [string]$Relative) {
     return $resolved
 }
 function Test-DistributionPayload([string]$Root) {
+    Assert-PlainTree $Root
+    if (Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object { $_.Extension -in @('.ovpn','.dpapi') }) {
+        throw 'Profil personnel interdit dans le paquet.'
+    }
     $checker = Join-Path (Split-Path -Parent $PSScriptRoot) 'bin\myneige-controller.exe'
     if (!(Test-Path -LiteralPath $checker)) { $checker = Join-Path (Split-Path -Parent $PSScriptRoot) '.local\poc\myneige-poc.exe' }
     if (Test-Path -LiteralPath $checker) {
@@ -45,7 +49,7 @@ function Test-DistributionPayload([string]$Root) {
         }
     }
     foreach ($required in @('MyNEIGE.exe','bin/myneige-controller.exe','resources/runtime/electron.exe',
-        'src/main/index.js','src/main/about.js','package.json','LICENSE','VPN_Universite_Avignon.ovpn',
+        'src/main/index.js','src/main/about.js','package.json','LICENSE',
         'scripts/launch-distribution.ps1','scripts/run-distribution-worker.ps1','scripts/openvpn-setup.ps1')) {
         if (!$seen.ContainsKey($required)) { throw "Fichier obligatoire absent du manifeste : $required" }
     }

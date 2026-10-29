@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$Worker, [switch]$ForgetCredentials, [string]$OpenVpn)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -36,7 +36,7 @@ if (!$Worker) {
     $exitFile = Join-Path $out 'exit-code.txt'
     if (Test-Path -LiteralPath $exitFile) { Remove-Item -LiteralPath $exitFile }
     $logName = 'session-' + [Guid]::NewGuid().ToString('N') + '.txt'
-    $p = Start-Process $binary -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $root -ArgumentList @('distribution-browse','--project-root',('"'+$root+'"'),'--profile',('"'+(Join-Path $root 'VPN_Universite_Avignon.ovpn')+'"'),'--openvpn',('"'+$OpenVpn+'"'),'--log-name',$logName)
+    $p = Start-Process $binary -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $root -ArgumentList @('distribution-browse','--project-root',('"'+$root+'"'),'--openvpn',('"'+$OpenVpn+'"'),'--log-name',$logName)
     Write-Output "MyNEIGE demarre (controleur PID $($p.Id)). Le formulaire s'ouvre apres les controles de protection."
     Write-Output "Diagnostic local sans identifiants : $(Join-Path $out 'live-session.txt')"
     # Keep the launcher alive so execution hosts do not reap the supervised tree.
@@ -49,7 +49,7 @@ if (!$Worker) {
 Set-Location -LiteralPath $root
 $ErrorActionPreference = 'Continue'
 if (!$OpenVpn) { throw 'Moteur OpenVPN verifie requis.' }
-& $binary browse --profile (Join-Path $root 'VPN_Universite_Avignon.ovpn') --project-root $root --openvpn $OpenVpn 2>&1 | Tee-Object -FilePath (Join-Path $out 'live-session.txt')
+& $binary browse --project-root $root --openvpn $OpenVpn 2>&1 | Tee-Object -FilePath (Join-Path $out 'live-session.txt')
 $code = $LASTEXITCODE
 [IO.File]::WriteAllText((Join-Path $out 'exit-code.txt'), [string]$code)
 exit $code

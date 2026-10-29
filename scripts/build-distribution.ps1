@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$SkipNativeBuild, [switch]$SkipInstaller, [string]$NsisPath)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -38,7 +38,7 @@ Copy-Item -LiteralPath $runtime -Destination (Join-Path $payload 'resources\runt
 foreach ($directory in @('src','assets')) { Copy-Item -LiteralPath (Join-Path $root $directory) -Destination (Join-Path $payload $directory) -Recurse }
 Copy-Item -LiteralPath (Join-Path $root '.local\poc\myneige-poc.exe') -Destination (Join-Path $payload 'bin\myneige-controller.exe')
 Copy-Item -LiteralPath (Join-Path $root '.local\launcher\MyNEIGE.exe') -Destination (Join-Path $payload 'MyNEIGE.exe')
-foreach ($file in @('LICENSE','VPN_Universite_Avignon.ovpn')) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $payload }
+foreach ($file in @('LICENSE')) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $payload }
 foreach ($file in @('distribution-common.ps1','launch-distribution.ps1','run-distribution-worker.ps1',
     'openvpn-setup.ps1','openvpn-prerequisites.ps1','openvpn-driver-store.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $payload 'scripts')
@@ -48,7 +48,7 @@ $appMetadata = [ordered]@{ name = $metadata.name; version = $metadata.version; r
 [IO.File]::WriteAllText((Join-Path $payload 'package.json'), ($appMetadata | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath (Join-Path $root 'docs\ALPHA_TESTER.md') -Destination (Join-Path $payload 'LIRE-MOI.md')
 Copy-Item -LiteralPath (Join-Path $root 'docs\UPDATES.md') -Destination $payload
-$notices = "MyNEIGE $($metadata.version) - Matra DevProd`r`nApache-2.0 : LICENSE`r`n`r`nElectron $($metadata.devDependencies.electron) : resources/runtime/LICENSE`r`nChromium et composants embarques : resources/runtime/LICENSES.chromium.html`r`n`r`nOpenVPN Community et TAP ne sont pas redistribues dans ce paquet.`r`nLeur installateur officiel est telecharge et verifie separement, avec votre accord.`r`nLe profil universitaire est embarque pour cette Alpha a la demande du developpeur.`r`n"
+$notices = "MyNEIGE $($metadata.version) - Matra DevProd`r`nApache-2.0 : LICENSE`r`n`r`nElectron $($metadata.devDependencies.electron) : resources/runtime/LICENSE`r`nChromium et composants embarques : resources/runtime/LICENSES.chromium.html`r`n`r`nOpenVPN Community et TAP ne sont pas redistribues dans ce paquet.`r`nLeur installateur officiel est telecharge et verifie separement, avec votre accord.`r`nAucun profil VPN n'est fourni ; chaque utilisateur importe son fichier personnel.`r`n"
 [IO.File]::WriteAllText((Join-Path $payload 'THIRD-PARTY-NOTICES.txt'), $notices, [Text.UTF8Encoding]::new($false))
 Assert-PlainTree $payload
 $files = @(Get-ChildItem -LiteralPath $payload -Recurse -File | Sort-Object FullName | ForEach-Object {
@@ -58,9 +58,8 @@ $manifest = [ordered]@{ schema = 1; product = 'MyNEIGE'; version = $metadata.ver
     minimumWindowsBuild = 22000; electronVersion = $metadata.devDependencies.electron; signed = $false; files = $files }
 [IO.File]::WriteAllText((Join-Path $payload 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
 $null = Test-DistributionPayload $payload
-# Validate the actual shipped public profile without starting a tunnel.
-& (Join-Path $payload 'bin\myneige-controller.exe') inspect --profile (Join-Path $payload 'VPN_Universite_Avignon.ovpn')
-if ($LASTEXITCODE -ne 0) { throw 'Validation native du profil embarque echouee.' }
+# Aucun profil personnel ne doit entrer dans le contenu distribuable.
+if (Get-ChildItem -LiteralPath $payload -Recurse -File -Filter '*.ovpn') { throw 'Profil VPN interdit dans un paquet.' }
 $zip = Join-Path $dist ($name + '-portable.zip')
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
 Add-Type -AssemblyName System.IO.Compression.FileSystem

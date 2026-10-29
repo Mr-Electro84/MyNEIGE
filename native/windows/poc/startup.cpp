@@ -85,6 +85,10 @@ static winrt::Windows::Data::Json::JsonObject readJson(const std::filesystem::pa
 void validateDistribution(const std::filesystem::path &root) {
     // Check all descendants too: an unlisted reparse point must not be accepted.
     assertPlainTree(root);
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(root)) {
+        auto extension = lower(utf8(entry.path().extension().wstring()));
+        require(extension != ".ovpn" && extension != ".dpapi", "Profil personnel interdit dans le paquet");
+    }
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     auto manifest = readJson(root / L"distribution.json");
     require(manifest.GetNamedString(L"product") == L"MyNEIGE" && manifest.GetNamedNumber(L"schema") == 1 &&
@@ -113,7 +117,7 @@ void validateDistribution(const std::filesystem::path &root) {
         require(lower(sha256File(root / name)) == lower(expected), "Fichier du programme manquant ou altere");
     }
     for (const auto *required : {L"myneige.exe", L"bin/myneige-controller.exe", L"resources/runtime/electron.exe",
-             L"src/main/index.js", L"src/main/about.js", L"package.json", L"license", L"vpn_universite_avignon.ovpn",
+             L"src/main/index.js", L"src/main/about.js", L"package.json", L"license",
              L"scripts/launch-distribution.ps1", L"scripts/run-distribution-worker.ps1", L"scripts/openvpn-setup.ps1"})
         require(seen.count(required) != 0, "Fichier obligatoire absent du manifeste");
     require(readJson(root / L"package.json").GetNamedString(L"version") == manifest.GetNamedString(L"version"),

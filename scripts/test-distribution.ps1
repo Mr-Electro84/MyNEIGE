@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([string]$Payload)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -12,8 +12,7 @@ function Assert-Distribution([bool]$Condition, [string]$Message) {
 }
 $manifest = Test-DistributionPayload $Payload
 Assert-Distribution ($manifest.version -ceq $metadata.version) 'Wrong shipped version.'
-Assert-Distribution ((Get-FileHash -LiteralPath (Join-Path $Payload 'VPN_Universite_Avignon.ovpn')).Hash -ceq
-    (Get-FileHash -LiteralPath (Join-Path $root 'VPN_Universite_Avignon.ovpn')).Hash) 'Embedded VPN profile differs.'
+Assert-Distribution (!(Get-ChildItem -LiteralPath $Payload -Recurse -File -Filter '*.ovpn')) 'VPN profile must not be shipped.'
 foreach ($excluded in @('node_modules','.git','.local','state','tests','native','scripts\build-poc.ps1')) {
     Assert-Distribution (!(Test-Path -LiteralPath (Join-Path $Payload $excluded))) "Development content shipped: $excluded"
 }

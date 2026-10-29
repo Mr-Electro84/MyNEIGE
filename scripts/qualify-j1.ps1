@@ -1,10 +1,12 @@
-[CmdletBinding()]
-param([switch]$Worker, [switch]$ProbeOnly, [switch]$NormalOnly, [ValidateRange(5,30)][int]$Seconds = 30)
+﻿[CmdletBinding()]
+param([string]$Profile, [switch]$Worker, [switch]$ProbeOnly, [switch]$NormalOnly, [ValidateRange(5,30)][int]$Seconds = 30)
 $ErrorActionPreference = 'Stop'
+if (!$Profile) { throw 'Fournir -Profile avec le chemin du profil personnel.' }
+$Profile = (Resolve-Path -LiteralPath $Profile).Path
 if (!$ProbeOnly -and $Seconds -lt 20) { throw 'Une fenetre stable de 20 secondes minimum est requise pour le temoin curl.' }
 $root = Split-Path -Parent $PSScriptRoot
 if (!$Worker) {
-    $arguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-Worker','-Seconds',[string]$Seconds)
+    $arguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-Worker','-Profile',('"'+$Profile+'"'),'-Seconds',[string]$Seconds)
     if ($ProbeOnly) { $arguments += '-ProbeOnly' }
     if ($NormalOnly) { $arguments += '-NormalOnly' }
     if (!$ProbeOnly) { $arguments = @('-NoExit') + $arguments }
@@ -31,7 +33,7 @@ if ($status -notmatch 'not running|pas en cours' -or $filters -notmatch 'Aucun|N
 }
 & $binary privilege-test 2>&1 | Tee-Object -FilePath (Join-Path $run 'privilege.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Le controle des privileges doit passer avant les essais VPN.' }
-$before = (& $binary inspect --profile (Join-Path $root 'VPN_Universite_Avignon.ovpn') 2>&1)
+$before = (& $binary inspect --profile $Profile 2>&1)
 $before | Out-File (Join-Path $run 'inspect-before.txt') -Encoding utf8
 Get-NetRoute | Select-Object InterfaceIndex,AddressFamily,DestinationPrefix,NextHop,RouteMetric | ConvertTo-Json -Depth 4 | Out-File (Join-Path $run 'routes-before.json') -Encoding utf8
 Get-DnsClientServerAddress | Select-Object InterfaceIndex,AddressFamily,ServerAddresses | ConvertTo-Json -Depth 5 | Out-File (Join-Path $run 'dns-before.json') -Encoding utf8
@@ -76,7 +78,7 @@ try {
             $vpnProcessId = 0
             $relayProcessId = 0
             Write-Host "Recette $scenario : saisir les identifiants uniquement dans cette console."
-            & $binary $scenario --profile (Join-Path $root 'VPN_Universite_Avignon.ovpn') --seconds ([string]$Seconds) 2>&1 | ForEach-Object {
+            & $binary $scenario --profile $Profile --seconds ([string]$Seconds) 2>&1 | ForEach-Object {
                 $_ | Tee-Object -FilePath (Join-Path $run ($scenario+'.txt')) -Append
                 if ([string]$_ -match '^VPN_INTERFACE index=') {
                     & pktmon list --json | Out-File (Join-Path $run ($scenario+'-components.json')) -Encoding utf8

@@ -93,4 +93,4 @@ try {
 }
 & (Join-Path $Payload 'bin\myneige-controller.exe') self-test
 Assert-Distribution ($LASTEXITCODE -eq 0) 'Shipped native protocol tests failed.'
-Write-Output "DISTRIBUTION_TEST checks=$checks manifest=true corruption_refused=true profile_embedded=true x64=true no_network_changes=true"
+Write-Output "DISTRIBUTION_TEST checks=$checks manifest=true corruption_refused=true profile_embedded=false x64=true no_network_changes=true"

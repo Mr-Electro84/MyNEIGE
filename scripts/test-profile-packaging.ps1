@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
+# Utiliser les modules de l'interpreteur courant, meme apres un lancement depuis PowerShell 7.
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
 $root = Split-Path -Parent $PSScriptRoot
 $binary = Join-Path $root '.local\poc\myneige-poc.exe'
 $fixture = [IO.Path]::GetFullPath((Join-Path $root ('.local\profile-payload-' + [Guid]::NewGuid().ToString('N'))))
@@ -11,7 +13,8 @@ function Assert-PayloadResult([bool]$Expected) {
     $previous = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        $LASTEXITCODE = $null
+        # Les commandes natives mettent a jour la variable globale ; ne pas la masquer localement.
+        $global:LASTEXITCODE = $null
         $resultLines = @(& $binary payload-check --project-root $fixture 2>&1)
         $resultCode = $LASTEXITCODE
     }

@@ -1,10 +1,10 @@
 # Distribution Alpha Windows
 
-Les formats de distribution sont implémentés pour **Windows 11 x64**. La diffusion est suspendue depuis le 29 octobre 2026. Aucun profil VPN ne doit être inclus dans les futurs paquets. Les anciens résultats de recette ci-dessous concernent des paquets retirés et ne valident pas cette évolution. Le lanceur natif, le dossier autonome, le ZIP et l’installateur NSIS sont construits localement ; la publication reste une étape distincte.
+Les formats de distribution sont implémentés pour **Windows 11 x64**. La diffusion publique est suspendue depuis le 29 octobre 2026 ; une construction locale ne vaut pas reprise de la publication. Aucun profil VPN ne doit être inclus dans les paquets. Les anciens résultats de recette ci-dessous concernent des paquets retirés et ne valident pas le profil personnel. Le lanceur natif, le dossier autonome, le ZIP et l’installateur NSIS sont construits localement ; la publication reste une étape distincte.
 
 ## Construire et utiliser
 
-Ces commandes nécessitent un accord explicite préalable ; elles ne font pas partie de la validation de cette correction.
+Ces commandes nécessitent un accord explicite préalable du mainteneur, conformément à [AGENTS.md](../AGENTS.md).
 
 ```powershell
 npm ci
@@ -14,13 +14,30 @@ npm run test:dist
 
 Prérequis de construction : Windows x64, Node.js/npm, Visual Studio Build Tools C++/SDK Windows et NSIS (`makensis.exe` sur PATH ou installation standard). Pour une installation NSIS personnalisée : `powershell -NoProfile -File scripts/build-distribution.ps1 -NsisPath 'C:\chemin\makensis.exe'`. `npm run dist:dir` produit le dossier et le ZIP sans installateur. Les deux exécutables natifs utilisent le runtime MSVC statique (`/MT`), avec icône et ressources de version.
 
-Sorties sous `dist` : dossier `MyNEIGE-1.0.2-alpha.1-win-x64`, archive `MyNEIGE-1.0.2-alpha.1-win-x64-portable.zip`, installateur `MyNEIGE-1.0.2-alpha.1-win-x64-setup.exe` et `MyNEIGE-1.0.2-alpha.1-win-x64-SHA256SUMS.txt`. Le paquet inclut un guide `LIRE-MOI.md` issu du [guide testeur](ALPHA_TESTER.md), les notices tierces et un manifeste SHA-256 par fichier. Il est actuellement **non signé**.
+Sorties sous `dist` : dossier `MyNEIGE-1.1.0-alpha.1-win-x64`, archive `MyNEIGE-1.1.0-alpha.1-win-x64-portable.zip`, installateur `MyNEIGE-1.1.0-alpha.1-win-x64-setup.exe` et `MyNEIGE-1.1.0-alpha.1-win-x64-SHA256SUMS.txt`. Le paquet inclut un guide `LIRE-MOI.md` issu du [guide testeur](ALPHA_TESTER.md), les notices tierces et un manifeste SHA-256 par fichier. Il est actuellement **non signé**.
 
 Le lanceur `MyNEIGE.exe`, à intégrité normale, utilise un seul Windows PowerShell 5.1 fourni avec Windows. Les empreintes du paquet sont vérifiées par le contrôleur natif ; la préparation OpenVPN s'exécute dans le même processus PowerShell, puis l'UAC démarre directement le contrôleur. Celui-ci écrit ses diagnostics dans un répertoire administratif protégé. Electron reste non administrateur ; ses binaires sont réutilisés depuis un cache protégé et reliés au staging propre à chaque session, avec les contrôles WFP existants. Aucun Node.js/npm ni compilation du programme chez le testeur. Les données utilisateur sont sous `%LOCALAPPDATA%\MyNEIGE`, les diagnostics administratifs sous `%PROGRAMDATA%\MyNEIGE-Logs`. Le ZIP conserve ces dépendances système et emplacements de données ; il ne s’agit pas d’une application sans traces. Voir [les corrections et mesures de démarrage](STARTUP_PERFORMANCE.md).
 
 L’installateur utilise l’emplacement fixe protégé `%ProgramFiles%\MyNEIGE`, crée les raccourcis du menu Démarrer et une entrée de désinstallation. Il conserve OpenVPN et les données utilisateur ; un raccourci séparé propose leur suppression avec confirmation **avant** désinstallation. L’installateur et le lanceur se verrouillent mutuellement ; les sessions natives sont aussi réservées pendant la copie/suppression. La désinstallation récupère les seules protections MyNEIGE résiduelles et supprime une liste explicite de fichiers, sans suppression récursive du dossier d’installation.
 
 La construction utilise **NSIS directement** et le runtime Electron épinglé. Aucun electron-builder n’est nécessaire. Les choix ci-dessous décrivent l’implémentation ; la recette sur VM propre reste à effectuer avant diffusion élargie.
+
+## Construction 1.1.0-alpha.1 — 2 novembre 2026
+
+Construction locale demandée explicitement par le mainteneur : version `1.1.0-alpha.1`, révision de livraison **3** dans `package.json` et dans le paquet. Les deux exécutables natifs et l’installateur portent cette version ; leur version numérique Windows est `1.1.0.1`. Electron reste épinglé à 45.0.0, sans changement de dépendances. Aucun profil VPN ni coffre personnel n’est inclus.
+
+Vérifications locales réalisées pour cette version :
+
+- Contrôleur et lanceur x64 compilés ; dossier autonome, ZIP portable et installateur NSIS produits avec la compression LZMA habituelle. Les deux empreintes du fichier `SHA256SUMS` et les ressources de version sont contrôlées.
+- `npm test` réussi : 41 tests natifs, coffre DPAPI avec données fictives, inspection du profil synthétique, 4 contrôles du paquet fictif et 91 tests JavaScript.
+- Les sept suites Electron passent : CAS (9 scénarios, aucune soumission automatique), profil personnel avec stockage simulé, navigateur (48 contrôles), téléchargements, Mail (7 contrôles sur boucle locale), renouvellement/expiration de session et mises à jour avec API simulée.
+- 46 contrôles de préparation OpenVPN réussis, sans installation.
+- `npm run test:dist` réussi : 35 contrôles du contenu livré, intégrité, métadonnées, architecture x64, absence de profil VPN et rejet de corruption.
+- ZIP extrait dans un chemin avec espaces et accents : intégrité des 125 fichiers et métadonnées `version=1.1.0-alpha.1`, `revision=3` vérifiées. `MyNEIGE.exe --check` réussit avec Node.js/npm retirés du `PATH`, OpenVPN étant déjà prêt sur ce poste.
+
+Le script de test du paquet fictif charge désormais explicitement le module Utility de l’interpréteur Windows PowerShell et évite de masquer le code de retour natif par une variable locale. Le bilan de `test:dist` et le texte d’accueil de l’installateur précisent l’absence de profil fourni et l’import du profil personnel. Ces corrections ne modifient pas le fonctionnement réseau de l’application.
+
+Les tests Electron, DPAPI et la construction ont été exécutés hors du bac à sable après des erreurs propres à ce contexte. Aucun compte universitaire n’a été utilisé. Le lancement interactif `npm start`, les précontrôles WFP avec UAC, le VPN réel, les pertes VPN/relais, l’installation/remplacement/désinstallation et la recette sur Windows propre ne sont pas rejoués pour cette version. Ces scénarios restent à qualifier séparément ; les paquets sont non signés et aucune publication n’a été effectuée.
 
 ## Construction 1.0.2-alpha.1 — 28 octobre 2026
 

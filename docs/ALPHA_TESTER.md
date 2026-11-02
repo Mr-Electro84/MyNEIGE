@@ -1,10 +1,10 @@
-# MyNEIGE 1.0.2-alpha.1 — Alpha Windows
+# MyNEIGE 1.1.0-alpha.1 — Alpha Windows
 
-Développeur : **Matra DevProd**. Révision de livraison : **2**. Licence du programme : Apache 2.0, texte intégral dans `LICENSE`. Les notices Electron et Chromium sont indiquées dans `THIRD-PARTY-NOTICES.txt`.
+Développeur : **Matra DevProd**. Révision de livraison : **3**. Licence du programme : Apache 2.0, texte intégral dans `LICENSE`. Les notices Electron et Chromium sont indiquées dans `THIRD-PARTY-NOTICES.txt`.
 
 ## Démarrer
 
-Windows 11 x64 (Intel/AMD), connexion Internet et accès à une élévation administrateur sont nécessaires. La distribution est suspendue. Les sources actuelles ne fournissent aucun profil VPN ; les anciens paquets ne doivent plus être redistribués. Node.js, npm, Visual Studio et NSIS ne sont pas nécessaires pour l’utiliser.
+Windows 11 x64 (Intel/AMD), connexion Internet et accès à une élévation administrateur sont nécessaires. Ce paquet ne contient aucun profil VPN ; chaque utilisateur doit importer son propre profil. Les anciens paquets retirés ne doivent plus être redistribués. Node.js, npm, Visual Studio et NSIS ne sont pas nécessaires pour l’utiliser.
 
 - **Installateur** : exécuter le fichier `setup.exe` et accepter l’installation avec UAC. Lancer ensuite **MyNEIGE** depuis le menu Démarrer.
 - **ZIP portable** : extraire **toute** l’archive dans un dossier local, puis ouvrir `MyNEIGE.exe`. Ne pas lancer l’exécutable directement depuis l’archive ni déplacer seulement ce fichier.

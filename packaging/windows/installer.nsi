@@ -27,7 +27,7 @@ VIAddVersionKey /LANG=1036 "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1036 "LegalCopyright" "Matra DevProd - Apache-2.0"
 
 !define MUI_ABORTWARNING
-!define MUI_WELCOMEPAGE_TEXT "MyNEIGE Alpha pour Windows 11 x64.$\r$\n$\r$\nLe programme inclut Electron et le profil VPN universitaire. OpenVPN Community/TAP sera vérifié au premier lancement et pourra être installé séparément avec votre accord.$\r$\n$\r$\nFermez MyNEIGE avant une installation, mise à jour ou désinstallation."
+!define MUI_WELCOMEPAGE_TEXT "MyNEIGE Alpha pour Windows 11 x64.$\r$\n$\r$\nLe programme inclut Electron, sans profil VPN. Importez votre propre profil universitaire au premier lancement. OpenVPN Community/TAP sera vérifié et pourra être installé séparément avec votre accord.$\r$\n$\r$\nFermez MyNEIGE avant une installation, mise à jour ou désinstallation."
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${PAYLOAD}\LICENSE"
 !insertmacro MUI_PAGE_INSTFILES

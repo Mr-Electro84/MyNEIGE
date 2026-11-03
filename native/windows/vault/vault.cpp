@@ -1,5 +1,7 @@
-#include "platform.hpp"
-#include "startup.hpp"
+#include "vault.hpp"
+#include "../shared/hash.hpp"
+#include "../shared/vpn-profile.hpp"
+#include <sddl.h>
 #include <shlobj.h>
 #include <tlhelp32.h>
 #include <wincrypt.h>
@@ -9,6 +11,19 @@
 
 namespace neige {
 using namespace winrt::Windows::Security::Credentials::UI;
+// Le coffre utilise toujours le compte de son propre processus non élevé.
+static std::wstring currentUserSid() {
+    Handle token;
+    require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token.h) != 0, "Cannot inspect vault user");
+    DWORD length = 0;
+    GetTokenInformation(token.h, TokenUser, nullptr, 0, &length);
+    require(length > 0 && length < 65536, "Invalid vault token");
+    Bytes data(length);
+    require(GetTokenInformation(token.h, TokenUser, data.data(), length, &length) != 0, "Cannot read vault user");
+    LPWSTR sid = nullptr;
+    require(ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER *>(data.data())->User.Sid, &sid) != 0, "Cannot encode vault user");
+    std::wstring result(sid); LocalFree(sid); return result;
+}
 struct Secret {
     Bytes bytes;
     ~Secret() {

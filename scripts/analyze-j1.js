@@ -40,7 +40,7 @@ const packets = nics.flatMap(nic => {
   const decoded = readPcapng(fs.readFileSync(file));
   return decoded.packets.map(packet => ({ ...packet, ifIndex: nic.ifIndex, component: nic.id, vpn: vpnGuids.has(nic.guid) }));
 });
-const flows = [...logs.matchAll(/^VPN_FLOW role=(DNS|WEB) protocol=(UDP|TCP) source=([\d.]+):(\d+) destination=([\d.]+):(\d+)/gm)]
+const flows = [...logs.matchAll(/^VPN_FLOW role=(DNS|WEB|SSH) protocol=(UDP|TCP) source=([\d.]+):(\d+) destination=([\d.]+):(\d+)/gm)]
   .map(m => ({ role: m[1], protocol: m[2] === 'TCP' ? 6 : 17, source: m[3], sourcePort: Number(m[4]), destination: m[5], destinationPort: Number(m[6]) }));
 const controls = [...logs.matchAll(/^HOST_CONTROL_FLOW source=([\d.]+):(\d+) destination=([\d.]+):(\d+)([^\r\n]*)/gm)]
   .map(m => ({ source: m[1], sourcePort: Number(m[2]), destination: m[3], destinationPort: Number(m[4]), phase: m[5].match(/phase=(active|after)/)?.[1] || 'unspecified' }));
@@ -66,6 +66,7 @@ const report = {
   schema: 1, root, capturedHeaderPackets: packets.length, tunnelInterfaces: [...vpnIndices],
   tunnelGenerations: vpnGuids.size, distinctLuids: vpnLuids.size,
   observedTunnelWeb: packets.filter(p => p.vpn && targetIPs.has(p.destination) && p.destinationPort === 443).length,
+  observedTunnelSsh: packets.filter(p => p.vpn && flows.some(flow => flow.role === 'SSH' && flowMatch(p, flow))).length,
   observedTunnelDnsUdp: packets.filter(p => p.vpn && dnsIPs.has(p.destination) && p.destinationPort === 53 && p.protocol === 17).length,
   observedTunnelDnsTcp: packets.filter(p => p.vpn && dnsIPs.has(p.destination) && p.destinationPort === 53 && p.protocol === 6).length,
   ordinaryApplicationPhysicalPackets: physical.filter(p => controls.some(flow => flowMatch(p, flow))).length,

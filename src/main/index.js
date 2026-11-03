@@ -21,6 +21,7 @@ const { networkErrors, networkError, requestMetadata } = require('./network-diag
 const { createSessionLifecycle } = require('./session-lifecycle');
 const { createUpdateService, createUpdateTransport, UPDATE_CHECK_ENABLED } = require('./updates');
 const { createUpdateToast } = require('./update-toast');
+const { createSshWindow } = require('./ssh-window');
 const metadata = require('../../package.json');
 
 // Network restrictions already exist in WFP before this process starts.
@@ -44,6 +45,7 @@ const formURL = pathToFileURL(formPath).href;
 let channel;
 const send = value => (channel || process.stdout).write(`${value}\n`);
 let vpnReady = false, downloads, downloadsWindow, sessionLifecycle, updates, updateToast, formSession;
+let sshTerminal;
 let vault, profile, vaultBusy = false, vaultEpoch = 0, rememberPending, rememberTimer;
 function clearRemember() {
   clearTimeout(rememberTimer); rememberTimer = undefined;
@@ -143,7 +145,7 @@ async function control(line) {
     testMode = parts[3] === 'test';
     vault = new NativeVault(path.resolve(__dirname, '../../../myneige-vault.exe'));
     profile = createVpnProfile({ helper: vault, send, unavailable: () => stopping,
-      invalidate: () => { ++vaultEpoch; clearRemember(); casPrefill.clear(); vault.cancelActive(); },
+      invalidate: () => { ++vaultEpoch; clearRemember(); casPrefill.clear(); vault.cancelActive(); sshTerminal?.invalidate(); },
       notify: value => {
         if (!form || form.isDestroyed()) return;
         form.webContents.send('myneige:profile-state', value);
@@ -217,6 +219,21 @@ async function control(line) {
       protectedWindow: (browserSession, prefiller, fixtureDownloads, ready, openExternal) => createProtectedWindow({ BrowserWindow,
         session: browserSession, prefiller, owners: prefillOwners, downloads: fixtureDownloads, ready, openExternal, show: false }) });
     send('UI_BROWSER_FEATURES_DONE');
+  } else if (line === 'TEST_SSH_RUNTIME' && form && testMode) {
+    // Vérifie les dépendances copiées et leur chargement sous WFP, sans serveur ni identifiants.
+    const client = new (require('ssh2').Client)();
+    const crypto = require('ssh2/lib/protocol/crypto');
+    await crypto.init;
+    if (crypto.bindingAvailable) throw new Error('Unexpected native SSH addon');
+    client.destroy();
+    const terminal = new BrowserWindow({ show: false, webPreferences: { session: formSession,
+      preload: path.join(__dirname, '../preload/ssh-terminal.js'), sandbox: true, contextIsolation: true, nodeIntegration: false } });
+    try {
+      await terminal.loadFile(path.join(__dirname, '../renderer/ssh-terminal.html'));
+      if (!await terminal.webContents.executeJavaScript('typeof Terminal === "function" && typeof FitAddon === "object" && typeof require === "undefined" && Boolean(document.querySelector(".xterm"))'))
+        throw new Error('SSH terminal runtime unavailable');
+    } finally { terminal.destroy(); }
+    send('UI_SSH_RUNTIME_DONE');
   } else if (line === 'TEST_SESSION_WARNING' && form && testMode) {
     for (const window of BrowserWindow.getAllWindows()) if (window !== form) window.destroy();
     webSession = session.fromPartition(`session-test-${Date.now()}`, { cache: false });
@@ -254,7 +271,7 @@ async function control(line) {
     else { authPending = true; state('AUTH_REQUIRED'); }
     void vaultStatus();
   } else if (parts[0] === 'STATE' && parts.length === 2 && ['BLOCKED', 'ERROR', 'CONNECTING'].includes(parts[1])) {
-    if (parts[1] !== 'CONNECTING') { vpnReady = false; stopUpdates(); casPrefill.clear(); clearRemember(); downloads?.stop(); }
+    if (parts[1] !== 'CONNECTING') { vpnReady = false; stopSsh(); stopUpdates(); casPrefill.clear(); clearRemember(); downloads?.stop(); }
     state(parts[1]);
     if (parts[1] === 'BLOCKED' && remote && !remote.isDestroyed()) remote.destroy();
   } else if (parts[0] === 'VPN_READY' && parts.length === 3 && form && !proxySecret) {
@@ -313,6 +330,7 @@ ipcMain.handle('myneige:vault-unlock', async event => {
 ipcMain.handle('myneige:vault-forget', async event => {
   if (!trusted(event) || stopping) throw new Error('Action refusée.');
   ++vaultEpoch; clearRemember(); casPrefill.clear(); vault.cancelActive();
+  sshTerminal?.invalidate();
   try { await vault.forget(); return await vaultStatus('DELETED'); }
   catch { vaultState({ message: 'DELETE_FAILED' }); return { message: 'DELETE_FAILED' }; }
 });
@@ -359,8 +377,19 @@ async function openProtectedSession() {
 function protectedWindow(browserSession = webSession, prefiller = casPrefill) {
   return createProtectedWindow({ BrowserWindow, session: browserSession, prefiller, owners: prefillOwners, show: !testMode,
     downloads: browserSession === webSession ? downloads : undefined, ready: () => (testMode || vpnReady) && !stopping,
-    mailReport: metadata => send(`UI_MAIL_SSO ${metadata}`), checkUpdates: manualUpdateCheck });
+    mailReport: metadata => send(`UI_MAIL_SSO ${metadata}`), checkUpdates: manualUpdateCheck,
+    openSsh: !testMode && browserSession === webSession ? openPedagoTerminal : undefined });
 }
+async function openPedagoTerminal(parent) {
+  if (!vpnReady || stopping || testMode) return;
+  sshTerminal ??= createSshWindow({ BrowserWindow, ipcMain, dialog, localSession: formSession,
+    vault: new NativeVault(vault.executable), fingerprint: () => profile.fingerprint(),
+    ready: () => vpnReady && !stopping,
+    proxy: () => ({ port: proxyPort, secret: proxySecret }),
+    knownHostFile: path.resolve(app.getPath('userData'), '../../ssh-known-host.json') });
+  await sshTerminal.open(parent);
+}
+function stopSsh() { sshTerminal?.dispose(); sshTerminal = undefined; }
 function ensureUpdateToast() {
   updateToast ??= createUpdateToast({ BrowserWindow, ipcMain, screen, dialog, localSession: formSession,
     action: choice => updates?.action(choice) ?? { ok: false }, show: !testMode });
@@ -394,6 +423,7 @@ function stopUpdates() { updates?.stop(); updates = undefined; updateToast?.disp
 async function expireSession() {
   vpnReady = false; authPending = false; proxySecret = undefined;
   stopUpdates();
+  stopSsh();
   ++vaultEpoch; clearRemember(); profile?.stop(); vault?.stop(); casPrefill.clear(); downloads?.stop();
   downloadsWindow?.dispose();
   // Le formulaire n'utilise qu'une session locale interdisant le réseau.
@@ -414,6 +444,7 @@ function shutdown(failed = false) {
   stopping = true; authPending = false; proxySecret = undefined;
   sessionLifecycle?.dispose();
   stopUpdates();
+  stopSsh();
   ++vaultEpoch; clearRemember(); profile?.stop(); vault?.stop();
   vpnReady = false; casPrefill.clear();
   downloads?.stop();

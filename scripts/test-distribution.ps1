@@ -16,7 +16,7 @@ Assert-Distribution (!(Get-ChildItem -LiteralPath $Payload -Recurse -File -Filte
 foreach ($excluded in @('node_modules','.git','.local','state','tests','native','scripts\build-poc.ps1')) {
     Assert-Distribution (!(Test-Path -LiteralPath (Join-Path $Payload $excluded))) "Development content shipped: $excluded"
 }
-foreach ($executable in @('MyNEIGE.exe','bin\myneige-controller.exe')) {
+foreach ($executable in @('MyNEIGE.exe','bin\myneige-controller.exe','bin\myneige-vault.exe')) {
     $file = Join-Path $Payload $executable
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($file)
     Assert-Distribution ($version.ProductVersion -ceq $metadata.version -and $version.CompanyName -ceq 'Matra DevProd') "Wrong executable metadata: $executable"
@@ -93,4 +93,6 @@ try {
 }
 & (Join-Path $Payload 'bin\myneige-controller.exe') self-test
 Assert-Distribution ($LASTEXITCODE -eq 0) 'Shipped native protocol tests failed.'
+& (Join-Path $Payload 'bin\myneige-vault.exe') vault-capabilities
+Assert-Distribution ($LASTEXITCODE -eq 0) 'Shipped dedicated vault failed.'
 Write-Output "DISTRIBUTION_TEST checks=$checks manifest=true corruption_refused=true profile_embedded=false x64=true no_network_changes=true"

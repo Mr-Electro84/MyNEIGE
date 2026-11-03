@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; frame-src 'none'; base-uri 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyNEIGE · Serveur pédagogique</title>
+  <link rel="stylesheet" href="../../node_modules/@xterm/xterm/css/xterm.css">
+  <link rel="stylesheet" href="ssh.css">
+  <script src="../../node_modules/@xterm/xterm/lib/xterm.js" defer></script>
+  <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js" defer></script>
+  <script src="ssh-terminal.js" defer></script>
+</head>
+<body class="terminal-window">
+  <header><div><p class="brand">CERI · SSH via VPN</p><h1>Serveur pédagogique</h1><p class="host">pedago.univ-avignon.fr</p></div>
+    <div class="actions"><button id="connect" type="button">Se connecter</button><button id="manual" type="button">Saisir les identifiants…</button><button id="disconnect" type="button" disabled>Déconnecter</button></div>
+  </header>
+  <p id="status" role="status" aria-live="polite">Préparation de la connexion…</p>
+  <main id="terminal" aria-label="Terminal SSH du serveur pédagogique"></main>
+  <footer>Les commandes s’exécutent sur le serveur universitaire. Fermer cette fenêtre termine la connexion SSH.</footer>
+</body>
+</html>

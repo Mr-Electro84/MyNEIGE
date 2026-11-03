@@ -16,6 +16,20 @@ static void copyReadOnlyTree(const std::filesystem::path &source, const std::fil
         grantUserRead(destination);
     }
 }
+static void copyJsDependency(const std::filesystem::path &source, const std::filesystem::path &destination) {
+    const DWORD attributes = GetFileAttributesW(source.c_str());
+    require(attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_REPARSE_POINT),
+            "Runtime dependency must not contain reparse points");
+    if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
+        std::filesystem::create_directories(destination);
+        grantUserRead(destination);
+        for (const auto &entry : std::filesystem::directory_iterator(source))
+            copyJsDependency(entry.path(), destination / entry.path().filename());
+    } else if (lower(utf8(source.extension().wstring())) != ".node") {
+        // Les accélérateurs natifs npm compilés pour Node ne sont pas chargés dans Electron.
+        copyReadOnlyTree(source, destination);
+    }
+}
 void BrowserPilot::prepare(const Staging &staging, const std::filesystem::path &projectRoot) {
     auto root = std::filesystem::absolute(projectRoot);
     auto runtime = root / L"resources/runtime";
@@ -27,13 +41,36 @@ void BrowserPilot::prepare(const Staging &staging, const std::filesystem::path &
     grantUserRead(browser);
     prepareRuntime(runtime, browser / L"runtime", staging.directory.parent_path());
     copyReadOnlyTree(root / L"src", browser / L"app");
+    auto modules = browser / L"node_modules";
+    require(std::filesystem::create_directory(modules), "Cannot create protected dependencies directory");
+    grantUserRead(modules);
+    std::ifstream dependencies(root / L"src/runtime-dependencies.txt");
+    require(bool(dependencies), "Missing runtime dependencies list");
+    std::string dependency;
+    while (std::getline(dependencies, dependency)) {
+        dependency = trim(dependency);
+        require(!dependency.empty() && dependency.size() <= 80 && dependency.front() != '/' &&
+                    dependency.find("..") == std::string::npos &&
+                    dependency.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789@/-") == std::string::npos,
+                "Invalid runtime dependency name");
+        auto relative = wide(dependency);
+        if (dependency.front() == '@') {
+            auto scope = modules / std::filesystem::path(relative).parent_path();
+            std::filesystem::create_directories(scope); grantUserRead(scope);
+        }
+        copyJsDependency(root / L"node_modules" / relative, modules / relative);
+    }
     copyReadOnlyTree(root / L"assets", browser / L"assets");
     copyReadOnlyTree(root / L"package.json", browser / L"package.json");
     copyReadOnlyTree(root / L"LICENSE", browser / L"LICENSE");
     executable = browser / L"runtime/electron.exe";
     entry = browser / L"app/main/index.js";
     vault = staging.directory / L"myneige-vault.exe";
-    require(CopyFileW(imagePath().c_str(), vault.c_str(), TRUE), "Cannot prepare protected credential helper");
+    auto vaultSource = root / L"bin/myneige-vault.exe";
+    if (!std::filesystem::exists(root / L"distribution.json")) vaultSource = root / L".local/poc/myneige-vault.exe";
+    require(std::filesystem::is_regular_file(vaultSource), "Build the dedicated credential helper first");
+    require(sha256File(vaultSource) != sha256File(imagePath()), "Credential helper must be distinct from controller");
+    require(CopyFileW(vaultSource.c_str(), vault.c_str(), TRUE), "Cannot prepare dedicated credential helper");
     grantUserRead(vault);
     userData = interactiveLocalAppData() / L"MyNEIGE/browser-data" / staging.directory.filename();
 }
@@ -440,6 +477,9 @@ int browserTest(const std::filesystem::path &projectRoot) {
                 "Browser navigation/download integration tests failed");
         std::cout << "BROWSER_FEATURES_TEST navigation=true downloads=true cookies_preserved=true cancellation=true"
                   << std::endl;
+        browser.send("TEST_SSH_RUNTIME\n");
+        require(browser.wait(30000) == "UI_SSH_RUNTIME_DONE", "SSH/terminal staged runtime unavailable");
+        std::cout << "BROWSER_SSH_RUNTIME javascript=true sandbox=true real_vpn=false" << std::endl;
         browser.send("TEST_SESSION_WARNING\n");
         require(browser.wait(10000) == "UI_SESSION_EXTEND", "Local session renewal IPC failed");
         browser.send("SESSION_EXTENDED\nTEST_SESSION_EXTENDED\n");

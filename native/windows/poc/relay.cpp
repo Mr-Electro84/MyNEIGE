@@ -15,7 +15,7 @@ static bool forbiddenDestination(uint32_t ip, const Adapter &vpn) {
             return true;
     return false;
 }
-static void tunnel(SOCKET client, SOCKET remote) {
+static void tunnel(SOCKET client, SOCKET remote, bool ssh = false) {
     std::array<char, 16384> buffer{};
     uint64_t up = 0, down = 0;
     auto lastActivity = GetTickCount64();
@@ -30,7 +30,7 @@ static void tunnel(SOCKET client, SOCKET remote) {
         timeval timeout{0, 200000};
         int count = select(0, &reads, nullptr, nullptr, &timeout);
         require(count >= 0, "Tunnel select failed");
-        require(GetTickCount64() - lastActivity < 20000, "Tunnel idle timeout");
+        require(GetTickCount64() - lastActivity < (ssh ? 180000u : 20000u), "Tunnel idle timeout");
         for (int side = 0; side < 2; ++side) {
             SOCKET source = side == 0 ? client : remote, destination = side == 0 ? remote : client;
             if (!FD_ISSET(source, &reads))
@@ -81,6 +81,8 @@ int relayWorker(bool publicMode) {
     for (char c : token)
         require(isxdigit(static_cast<unsigned char>(c)) != 0, "Invalid session token");
     std::string expected = "Basic " + basic64("myneige:" + token);
+    // Capacité distincte : l'authentification proxy de Chromium ne permet pas SSH.
+    std::string expectedSsh = !publicMode && scope == "university" ? sshProxyAuthorization(token) : "";
     wipe(token);
     auto current = adapterFor(vpn.address);
     require(current.luid == vpn.luid && current.index == vpn.index && current.guid == vpn.guid &&
@@ -120,7 +122,7 @@ int relayWorker(bool publicMode) {
             }
             continue;
         }
-        std::thread([client = std::move(client), vpn, dns, host, expected, scope, publicMode, publicPort]() mutable {
+        std::thread([client = std::move(client), vpn, dns, host, expected, expectedSsh, scope, publicMode, publicPort]() mutable {
             struct Count {
                 bool reserved = false, publicRoute = false;
                 ~Count() {
@@ -132,10 +134,10 @@ int relayWorker(bool publicMode) {
             std::string requestHost = "unknown";
             const char *stage = "HEADER";
             try {
-                auto request = parseConnect(readHeader(client.s));
+                auto request = parseConnect(readHeader(client.s), !expectedSsh.empty());
                 requestHost = request.host;
                 stage = "AUTH";
-                if (!constantEqual(request.authorization, expected)) {
+                if (!authorizedConnect(request, expected, expectedSsh)) {
                     wipe(request.authorization);
                     sendText(client.s, "HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic "
                                        "realm=\"MyNEIGE-PoC\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
@@ -183,8 +185,9 @@ int relayWorker(bool publicMode) {
                     try {
                         stage = "CONNECT";
                         auto candidate = vpnSocket(vpn, SOCK_STREAM, IPPROTO_TCP);
-                        connectWithin(candidate.s, endpoint(address, 443));
-                        reportFlow(publicMode ? "WEB_PUBLIC" : "WEB", "TCP", candidate.s, address, 443);
+                        connectWithin(candidate.s, endpoint(address, request.port));
+                        reportFlow(request.port == 22 ? "SSH" : publicMode ? "WEB_PUBLIC" : "WEB",
+                                   "TCP", candidate.s, address, request.port);
                         remote = std::move(candidate);
                         break;
                     } catch (const std::exception &) { /* Next A record, still bound to the same tunnel. */
@@ -194,7 +197,7 @@ int relayWorker(bool publicMode) {
                 sendText(client.s, "HTTP/1.1 200 Connection Established\r\n\r\n");
                 established = true;
                 stage = "TUNNEL";
-                tunnel(client.s, remote.s);
+                tunnel(client.s, remote.s, request.port == 22);
             } catch (const std::exception &) {
                 const int code = WSAGetLastError();
                 if (!established) {

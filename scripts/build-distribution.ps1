@@ -19,7 +19,7 @@ if (!$SkipNativeBuild) {
     & (Join-Path $PSScriptRoot 'build-poc.ps1')
     & (Join-Path $PSScriptRoot 'build-launcher.ps1')
 }
-foreach ($file in @('.local\poc\myneige-poc.exe','.local\launcher\MyNEIGE.exe')) {
+foreach ($file in @('.local\poc\myneige-poc.exe','.local\poc\myneige-vault.exe','.local\launcher\MyNEIGE.exe')) {
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $root $file))
     if ($version.ProductVersion -cne $metadata.version) { throw "Binaire obsolete : $file" }
 }
@@ -36,7 +36,22 @@ New-Item -ItemType Directory -Path $payload -Force | Out-Null
 foreach ($directory in @('bin','resources','scripts')) { New-Item -ItemType Directory -Path (Join-Path $payload $directory) | Out-Null }
 Copy-Item -LiteralPath $runtime -Destination (Join-Path $payload 'resources\runtime') -Recurse
 foreach ($directory in @('src','assets')) { Copy-Item -LiteralPath (Join-Path $root $directory) -Destination (Join-Path $payload $directory) -Recurse }
+# Les dépendances SSH/terminal sont également copiées dans le staging de développement natif.
+# Exclure les accélérateurs .node compilés pour Node : utiliser le chemin JavaScript dans Electron.
+foreach ($dependency in Get-Content -LiteralPath (Join-Path $root 'src\runtime-dependencies.txt')) {
+    if ($dependency -notmatch '^(@[a-z0-9-]+/)?[a-z0-9-]+$') { throw 'Nom de dependance runtime invalide.' }
+    $sourceDependency = Join-Path $root ('node_modules\' + $dependency)
+    Assert-PlainTree $sourceDependency
+    foreach ($entry in Get-ChildItem -LiteralPath $sourceDependency -Recurse -File) {
+        if ($entry.Extension -eq '.node') { continue }
+        $relative = $entry.FullName.Substring($sourceDependency.Length + 1)
+        $target = Join-Path $payload ('node_modules\' + $dependency + '\' + $relative)
+        New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+        Copy-Item -LiteralPath $entry.FullName -Destination $target
+    }
+}
 Copy-Item -LiteralPath (Join-Path $root '.local\poc\myneige-poc.exe') -Destination (Join-Path $payload 'bin\myneige-controller.exe')
+Copy-Item -LiteralPath (Join-Path $root '.local\poc\myneige-vault.exe') -Destination (Join-Path $payload 'bin\myneige-vault.exe')
 Copy-Item -LiteralPath (Join-Path $root '.local\launcher\MyNEIGE.exe') -Destination (Join-Path $payload 'MyNEIGE.exe')
 foreach ($file in @('LICENSE')) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $payload }
 foreach ($file in @('distribution-common.ps1','launch-distribution.ps1','run-distribution-worker.ps1',
@@ -49,6 +64,7 @@ $appMetadata = [ordered]@{ name = $metadata.name; version = $metadata.version; r
 Copy-Item -LiteralPath (Join-Path $root 'docs\ALPHA_TESTER.md') -Destination (Join-Path $payload 'LIRE-MOI.md')
 Copy-Item -LiteralPath (Join-Path $root 'docs\UPDATES.md') -Destination $payload
 $notices = "MyNEIGE $($metadata.version) - Matra DevProd`r`nApache-2.0 : LICENSE`r`n`r`nElectron $($metadata.devDependencies.electron) : resources/runtime/LICENSE`r`nChromium et composants embarques : resources/runtime/LICENSES.chromium.html`r`n`r`nOpenVPN Community et TAP ne sont pas redistribues dans ce paquet.`r`nLeur installateur officiel est telecharge et verifie separement, avec votre accord.`r`nAucun profil VPN n'est fourni ; chaque utilisateur importe son fichier personnel.`r`n"
+$notices += "`r`nTerminal SSH : ssh2 (MIT), xterm.js et addon-fit (MIT), asn1 (MIT), safer-buffer (MIT), bcrypt-pbkdf (BSD-3-Clause), tweetnacl (Unlicense).`r`nLes textes de licence sont inclus dans les repertoires node_modules de ces composants.`r`n"
 [IO.File]::WriteAllText((Join-Path $payload 'THIRD-PARTY-NOTICES.txt'), $notices, [Text.UTF8Encoding]::new($false))
 Assert-PlainTree $payload
 $files = @(Get-ChildItem -LiteralPath $payload -Recurse -File | Sort-Object FullName | ForEach-Object {

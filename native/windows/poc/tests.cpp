@@ -351,6 +351,23 @@ int selfTest() {
         rejects([] { parseConnect("CONNECT target.test:80 HTTP/1.1\r\n\r\n"); });
         rejects([] { parseConnect("GET https://target.test/ HTTP/1.1\r\n\r\n"); });
     });
+    test("SSH CONNECT restricted destination and distinct capability", [&] {
+        const std::string host = "pedago.univ-avignon.fr";
+        const auto ssh = sshProxyAuthorization(std::string(64, 'a'));
+        require(ssh == "Basic bXluZWlnZS1zc2g6NzljZTM4MTdlNzlhM2U5ZjcxMzJiNjI1NjNmYjdmYjk1ODBiNjg1MmFiZjI4ODMyMTQ5MjQ0MzMxOTEwOTBkZQ==",
+                "SSH capability differs from the JavaScript protocol");
+        auto request = parseConnect("CONNECT " + host + ":22 HTTP/1.1\r\nProxy-Authorization: " + ssh + "\r\n\r\n", true);
+        require(request.port == 22 && authorizedConnect(request, "Basic web-only", ssh), "SSH request refused");
+        require(!authorizedConnect(request, ssh, ""), "Public relay accepted SSH");
+        request.authorization = "Basic web-only";
+        require(!authorizedConnect(request, "Basic web-only", ssh), "Web capability authorized SSH");
+        auto web = parseConnect("CONNECT " + host + ":443 HTTP/1.1\r\nProxy-Authorization: " + ssh + "\r\n\r\n");
+        require(!authorizedConnect(web, "Basic web-only", ssh), "SSH capability authorized web traffic");
+        rejects([&] { parseConnect("CONNECT " + host + ":22 HTTP/1.1\r\n\r\n"); });
+        for (const auto &target : {"cas.univ-avignon.fr:22", "pedago.univ-avignon.fr.evil.test:22",
+             "127.0.0.1:22", "pedago.univ-avignon.fr:2222", "pedago.univ-avignon.fr:022"})
+            rejects([&] { parseConnect("CONNECT " + std::string(target) + " HTTP/1.1\r\n\r\n", true); });
+    });
     test("push metadata restricted extraction", [] {
         PushOptions push;
         push.observe(">LOG:0,,PUSH: Received control message: 'PUSH_REPLY,route-gateway 10.0.0.1,dhcp-option DNS "

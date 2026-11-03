@@ -35,7 +35,7 @@ try {
                     if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
                 }
             }
-        } else { & $binary vault-forget; if ($LASTEXITCODE -ne 0) { throw 'Suppression des identifiants impossible.' } }
+        } else { & (Join-Path $root 'bin\myneige-vault.exe') vault-forget; if ($LASTEXITCODE -ne 0) { throw 'Suppression des identifiants impossible.' } }
         Show-MyneigeMessage 'Les donnees selectionnees ont ete supprimees.' 'Information'
         exit 0
     }

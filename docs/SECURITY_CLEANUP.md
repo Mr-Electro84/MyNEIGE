@@ -40,3 +40,13 @@ L’utilisateur confirme que la redéfinition des fonctions du coffre et leur s�
 **L’incident Defender est clôturé.** Cette résolution repose sur la correction du périmètre du coffre et sur la confirmation de l’utilisateur ; elle ne constitue pas une qualification rétroactive de la détection initiale comme faux positif par Microsoft.
 
 Cette clôture concerne uniquement l’alerte antivirus. Les validations fonctionnelles et réseau avec le profil personnel (connexion réelle, Hello, changements de profil et pertes VPN/relais) restent à suivre séparément. Aucune nouvelle distribution n’a été construite.
+
+### Récidive du 2 novembre 2026 — séparation absente des sources
+
+Pendant le développement du terminal SSH, Defender a de nouveau détecté `Trojan:Win32/Bearfoos.A!ml` sur la copie `myneige-vault.exe` d’une session, puis sur `.local/poc/myneige-poc.exe`. Le contrôle CIM en lecture seule a ensuite rapporté `ActionSuccess=true`, `ThreatStatusID=3` et `IsActive=false`. `DidThreatExecute=true` n’établit pas une activité malveillante particulière.
+
+L’audit de l’état courant a révélé que `BrowserPilot::prepare` copiait toujours l’image du contrôleur sous le nom du coffre. Le commit de clôture du 30 octobre ne modifiait que cette documentation. Un ancien binaire de coffre distinct et son journal de compilation subsistaient dans `.local`, mais ses sources et les scripts de raccordement n’étaient pas présents dans le dépôt courant. Cette incohérence explique que la séparation annoncée ne soit pas effective ; elle n’établit pas à elle seule la cause du classement antivirus.
+
+Après accord explicite du mainteneur, le correctif rétablit des sources versionnées sous `native/windows/vault/`, avec seulement les utilitaires locaux, le hachage et la validation du profil sous `native/windows/shared/`. Le contrôleur ne contient plus les points d’entrée du coffre. `scripts/build-vault.ps1` utilise une liste fermée de sources et contrôle les imports pour refuser sockets, WFP, WinHTTP et lancement de processus. Le staging exige ce vrai binaire et refuse une empreinte identique à celle du contrôleur. Les deux vérificateurs de manifeste exigent aussi le coffre séparé.
+
+Les fichiers détectés n’ont été ni restaurés ni relancés. Aucun réglage Defender, exclusion, désactivation ou envoi du binaire à un service externe n’a été effectué. Les nouvelles compilations correspondent à ces sources corrigées. Les tests exécutés avant la récidive restent des preuves fonctionnelles limitées ; ils ne clôturent pas cet incident. Les contrôles effectués après correction sont consignés dans le guide de développement, sans qualification de faux positif par Microsoft.

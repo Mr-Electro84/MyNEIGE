@@ -18,7 +18,7 @@ function historyTarget(contents, offset) {
   const entry = history.getEntryAtIndex(history.getActiveIndex() + offset);
   return Boolean(entry && allowedURL(entry.url));
 }
-function installNavigation({ window, Menu, ready, downloads, universityWindow = window, checkUpdates }) {
+function installNavigation({ window, Menu, ready, downloads, universityWindow = window, checkUpdates, openSsh }) {
   const contents = window.webContents;
   const canVisitUniversity = () => ready() && !universityWindow.isDestroyed() && !universityWindow.webContents.isDestroyed();
   const visitUniversity = url => {
@@ -45,6 +45,10 @@ function installNavigation({ window, Menu, ready, downloads, universityWindow = 
     { label: 'Université', submenu: UNIVERSITY_LINKS.map(({ id, label, url }) => ({
       id, label, click: () => visitUniversity(url)
     })) },
+    { label: 'CERI', submenu: [
+      { id: 'ceri-pedago', label: 'Serveur pédagogique…', enabled: Boolean(openSsh) && ready(),
+        click: () => { if (ready() && openSsh) void openSsh(window).catch(() => {}); } }
+    ] },
     { label: 'Fichiers', submenu: [
       { id: 'downloads', label: 'Téléchargements…', accelerator: 'Control+J', enabled: Boolean(downloads),
         click: () => { void downloads?.show(window).catch(() => {}); } }
@@ -56,6 +60,7 @@ function installNavigation({ window, Menu, ready, downloads, universityWindow = 
     menu.getMenuItemById('back').enabled = ready() && historyTarget(contents, -1);
     menu.getMenuItemById('forward').enabled = ready() && historyTarget(contents, 1);
     menu.getMenuItemById('home').enabled = ready();
+    menu.getMenuItemById('ceri-pedago').enabled = Boolean(openSsh) && canVisitUniversity();
     for (const { id } of UNIVERSITY_LINKS) menu.getMenuItemById(id).enabled = canVisitUniversity();
   };
   window.setMenu(menu); window.setMenuBarVisibility(true);

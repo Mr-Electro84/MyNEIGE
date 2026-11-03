@@ -12,7 +12,7 @@ npm run dist:win
 npm run test:dist
 ```
 
-Prérequis de construction : Windows x64, Node.js/npm, Visual Studio Build Tools C++/SDK Windows et NSIS (`makensis.exe` sur PATH ou installation standard). Pour une installation NSIS personnalisée : `powershell -NoProfile -File scripts/build-distribution.ps1 -NsisPath 'C:\chemin\makensis.exe'`. `npm run dist:dir` produit le dossier et le ZIP sans installateur. Les deux exécutables natifs utilisent le runtime MSVC statique (`/MT`), avec icône et ressources de version.
+Prérequis de construction : Windows x64, Node.js/npm, Visual Studio Build Tools C++/SDK Windows et NSIS (`makensis.exe` sur PATH ou installation standard). Pour une installation NSIS personnalisée : `powershell -NoProfile -File scripts/build-distribution.ps1 -NsisPath 'C:\chemin\makensis.exe'`. `npm run dist:dir` produit le dossier et le ZIP sans installateur. Le lanceur, le contrôleur et le coffre natif dédié utilisent le runtime MSVC statique (`/MT`), avec icône et ressources de version. Le coffre `bin/myneige-vault.exe` est obligatoire dans les futurs manifestes ; il ne peut être remplacé par une copie du contrôleur.
 
 Sorties sous `dist` : dossier `MyNEIGE-1.1.0-alpha.1-win-x64`, archive `MyNEIGE-1.1.0-alpha.1-win-x64-portable.zip`, installateur `MyNEIGE-1.1.0-alpha.1-win-x64-setup.exe` et `MyNEIGE-1.1.0-alpha.1-win-x64-SHA256SUMS.txt`. Le paquet inclut un guide `LIRE-MOI.md` issu du [guide testeur](ALPHA_TESTER.md), les notices tierces et un manifeste SHA-256 par fichier. Il est actuellement **non signé**.
 

@@ -46,6 +46,7 @@ Après `npm ci`, ces commandes utilisent les tests locaux et leurs données fict
 | `npm run test:mail` | Parcours SSO Mail/PARTAGE avec réponses TLS locales, sans authentification réelle. |
 | `npm run test:session` | Avertissement local, prolongation et écran de fin de session dans Electron, avec échéance simulée. |
 | `npm run test:updates` | API simulée derrière un proxy authentifié, toast local, actions IPC et préférence de rappel. |
+| `npm run test:ssh` | Fenêtre du terminal xterm.js, dialogue modal, Hello simulé, IPC et arrêt ; les tests Node inclus dans `npm test` couvrent aussi un serveur SSH local fictif. |
 
 Ces scénarios ciblés ne remplacent pas un test sous confinement WFP ni une recette réseau réelle. La confiance TLS particulière de la fixture Mail reste limitée à la session de test et n’est pas installée dans Windows.
 
@@ -114,6 +115,7 @@ La console interactive demande les identifiants localement. Ne jamais fournir de
 | Mail/PARTAGE, RENATER, Nextcloud, lecteurs YouTube/H5P et exceptions de routage | [Contenus intégrés et messagerie](EMBEDDED_CONTENT.md). |
 | Retour d’authentification PARTAGE : diagnostics sans données d’authentification et reprise HTTPS unique du parcours reconnu | [Retour d’authentification PARTAGE](EMBEDDED_CONTENT.md#retour-dauthentification-partage). |
 | Enregistrement facultatif DPAPI, vérification Windows Hello et préparation d’OpenVPN | [Identifiants et OpenVPN](J2_CREDENTIALS_SETUP.md). |
+| Terminal séparé CERI, authentification SSH, clé d’hôte et transport limité au VPN | [Serveur pédagogique](SSH_PEDAGO.md). |
 | Cache Electron protégé, vérification native des empreintes et réduction des processus PowerShell au démarrage | [Performances de démarrage](STARTUP_PERFORMANCE.md). Les chemins de session WFP restent distincts. |
 | Version, révision, toast de mise à jour, appel API hors VPN et remplacement NSIS | [Mises à jour](UPDATES.md). |
 | Icônes des fenêtres, pop-ups, exécutables et raccourcis | [Ressources graphiques](J2_NAVIGATION_DOWNLOADS.md#icône-electron) et [distribution](ALPHA_DISTRIBUTION.md). |
@@ -156,4 +158,4 @@ Le site se trouve dans `website/`, avec une feuille CSS séparée et sans dépen
 
 ## Retrait de la configuration VPN et alerte Defender
 
-Consulter le [compte rendu de sécurité du 29 octobre 2026](SECURITY_CLEANUP.md) avant tout nouvel essai natif. La validation native est interrompue par une détection Defender sur le contrôleur et sa copie de coffre ; les résultats antérieurs ne lèvent pas ce blocage. Ne pas restaurer ni relancer les fichiers détectés pour poursuivre la recette.
+Consulter le [compte rendu de sécurité et sa mise à jour du 2 novembre 2026](SECURITY_CLEANUP.md). La récidive a mis en évidence l’absence du correctif annoncé dans les sources : le coffre était encore une copie du contrôleur. Après accord du mainteneur, `scripts/build-vault.ps1` compile désormais un coffre réellement séparé ; `poc:build` produit les deux composants et le staging refuse leur confusion. Les fichiers détectés ne doivent pas être restaurés ou relancés pour poursuivre une recette. Les contrôles antivirus des nouveaux fichiers ne constituent pas une analyse rétroactive du binaire détecté.

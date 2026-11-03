@@ -1,8 +1,7 @@
 #pragma once
 #include "platform.hpp"
+#include "../shared/hash.hpp"
 namespace neige {
-std::string sha256File(const std::filesystem::path &path);
-std::string sha256Text(const std::string &text);
 void assertPlainTree(const std::filesystem::path &root);
 void validateDistribution(const std::filesystem::path &root);
 struct RuntimeFile {

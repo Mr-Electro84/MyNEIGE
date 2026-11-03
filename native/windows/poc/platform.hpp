@@ -92,9 +92,6 @@ Handle restrictedToken();
 std::wstring currentUserSid();
 void selectInteractiveUser();
 std::filesystem::path interactiveLocalAppData();
-int vaultWorker();
-int vaultSelfTest();
-int vaultForget();
 void grantUserRead(const std::filesystem::path &path);
 void removeProtectedTree(const std::filesystem::path &path, const std::filesystem::path &sessionRoot,
                          bool runtimeCacheCleanup = false);

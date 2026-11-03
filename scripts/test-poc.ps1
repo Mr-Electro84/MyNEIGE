@@ -6,7 +6,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $repoRoot = Split-Path -Parent $PSScriptRoot
 & (Join-Path $repoRoot '.local\poc\myneige-poc.exe') self-test
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& (Join-Path $repoRoot '.local\poc\myneige-poc.exe') vault-self-test
+& (Join-Path $repoRoot '.local\poc\myneige-vault.exe') vault-self-test
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 # Profil synthétique uniquement : aucun accès au profil personnel.
 $result = & (Join-Path $repoRoot '.local\poc\myneige-poc.exe') inspect --profile (Join-Path $repoRoot 'tests/fixtures/synthetic.ovpn')

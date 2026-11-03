@@ -5,7 +5,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $binary = Join-Path $root '.local\poc\myneige-poc.exe'
 if ($ForgetCredentials) {
     if (!(Test-Path -LiteralPath $binary)) { throw 'Compiler le pilote avant le lancement.' }
-    & $binary vault-forget; exit $LASTEXITCODE
+    & (Join-Path $root '.local\poc\myneige-vault.exe') vault-forget; exit $LASTEXITCODE
 }
 $out = Join-Path $root '.local\browser'
 New-Item -ItemType Directory -Path $out -Force | Out-Null

@@ -1,10 +1,11 @@
 [CmdletBinding()]
-param([switch]$FreshDownload)
+param([switch]$FreshDownload, [string]$Arm64Package)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $setup = Join-Path $PSScriptRoot 'openvpn-setup.ps1'
 . (Join-Path $PSScriptRoot 'openvpn-prerequisites.ps1')
 . (Join-Path $PSScriptRoot 'openvpn-driver-store.ps1')
+. (Join-Path $PSScriptRoot 'windows-platform.ps1')
 $checks = 0
 function Assert-Setup([bool]$Ok, [string]$Message) { if (!$Ok) { throw $Message }; $script:checks++ }
 # Old builds returned help/code 2 instead of executing openvpn-check. Reproduce
@@ -90,7 +91,19 @@ Assert-Setup ($case.Error -ne '' -and $case.Steps -eq 'offer,download') 'Failed 
 $case = Invoke-Scenario $unsupported
 Assert-Setup ($case.Error -ne '' -and $case.Steps -eq '') 'Unsupported files must block automated replacement.'
 $case = Invoke-Scenario $missing -Architecture 'Arm64'
-Assert-Setup ($case.Error -like '*Arm64*' -and $case.Steps -eq '') 'Architecture mismatch must be explicit.'
+Assert-Setup ($case.Result.Status -eq 'Ready' -and $case.Steps -eq 'offer,download,install,recheck') 'ARM64 must offer the native OpenVPN installer.'
+$case = Invoke-Scenario $ready -Architecture 'Arm64'
+Assert-Setup ($case.Result.Status -eq 'Ready' -and $case.Steps -eq '') 'An existing ARM64 installation must be reused.'
+$case = Invoke-Scenario $missing -Architecture 'Arm64' -Agree $false
+Assert-Setup ($case.Result.Status -eq 'Cancelled' -and $case.Steps -eq 'offer') 'ARM64 cancellation must not download or install.'
+$case = Invoke-Scenario $missing -Architecture 'Arm64' -InstallerCode 3010
+Assert-Setup ($case.Result.Status -eq 'RebootRequired') 'ARM64 must preserve the required reboot.'
+$case = Invoke-Scenario $missing -Architecture 'Arm64' -After $incomplete
+Assert-Setup ($case.Error -ne '' -and $case.Steps -eq 'offer,download,install,recheck') 'ARM64 must retain final prerequisite validation.'
+foreach ($state in @($missing,$ready)) {
+    $case = Invoke-Scenario $state -Architecture 'X86'
+    Assert-Setup ($case.Error -like '*X86*' -and $case.Steps -eq '') 'Unsupported hosts must stop before all effects, even with a ready engine.'
+}
 $case = Invoke-Scenario $missing -After $incomplete
 Assert-Setup ($case.Error -ne '' -and $case.Steps -eq 'offer,download,install,recheck') 'Final prerequisite validation must remain mandatory.'
 $failedCheck = [pscustomobject]@{ State = 'Incomplete'; Path = ''; Message = 'paquet_TAP=False; controle_natif=1' }
@@ -115,11 +128,12 @@ try {
     $code = $LASTEXITCODE; $ErrorActionPreference = $previous
     if ($code -eq 0) { throw 'An untrusted installer was accepted.' }
     $diagnostic = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
-    Assert-Setup ($diagnostic.Status -eq 'Error' -and $diagnostic.Stage -eq 'Verification paquet' -and $diagnostic.Message -like '*Empreinte*') 'The launcher must receive the actual failure reason.'
+    Assert-Setup ($diagnostic.Status -eq 'Error' -and $diagnostic.Stage -eq 'Verification paquet' -and $diagnostic.Message -like '*Empreinte*') ('The launcher must receive the actual failure reason: ' + $diagnostic.Stage + ' / ' + $diagnostic.Message)
     Assert-Setup (($output | Out-String) -match 'OPENVPN_SETUP_ERROR stage=Verification paquet line=\d+ type=') 'The diagnostic must preserve the failure location and exception type.'
     $nativeRejection = Invoke-OpenVpnNativeCommand -Binary $binary -Arguments @('openvpn-check','--openvpn',$fixture)
     Assert-Setup (!(Test-OpenVpnNativeResult $nativeRejection) -and $nativeRejection.Output -like 'ERROR:*') 'The real native checker must still reject an unsigned synthetic engine.'
-    $cached = Join-Path $root '.local\downloads\OpenVPN-2.7.8-I001-amd64.msi'
+    $packageReference = Get-OpenVpnPackageReference (Get-MyneigeNativeArchitecture)
+    $cached = Join-Path $root ('.local\downloads\' + $packageReference.FileName)
     if (Test-Path -LiteralPath $cached) {
         $product = Get-OpenVpnMsiProductCode $cached
         Assert-Setup ($product -match '^\{[A-Fa-f0-9-]{36}\}$') 'Signed fixture MSI product lookup failed.'
@@ -128,10 +142,10 @@ try {
         $freshDirectory = Join-Path $root ('.local\setup-download-test-' + [Guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $freshDirectory | Out-Null
         $freshResult = Join-Path $freshDirectory 'result.json'
-        $freshPackage = Join-Path $freshDirectory 'OpenVPN-2.7.8-I001-amd64.msi'
+        $freshPackage = Join-Path $freshDirectory $packageReference.FileName
         try {
             Assert-Setup (!(Test-Path -LiteralPath $freshPackage)) 'Fresh download must start without a cached MSI.'
-            $powershell51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $powershell51 = Get-MyneigeSystemExecutable 'WindowsPowerShell\v1.0\powershell.exe'
             $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
             # No -Install / -Ensure: download and verify only, never start MSI/UAC.
             $downloadOutput = & $powershell51 -NoProfile -ExecutionPolicy Bypass -File $setup -DownloadDirectory $freshDirectory -ResultFile $freshResult 2>&1
@@ -139,7 +153,7 @@ try {
             if ($downloadCode -ne 0) { throw ('Fresh Windows PowerShell 5.1 download failed: ' + ($downloadOutput | Out-String)) }
             $downloadResult = Get-Content -LiteralPath $freshResult -Raw | ConvertFrom-Json
             Assert-Setup ($downloadResult.Status -eq 'Downloaded') 'Fresh download did not finish verification.'
-            Assert-Setup ((Get-FileHash -LiteralPath $freshPackage -Algorithm SHA256).Hash -eq '1EA61A3056905B90607D4B0F084C04E5CF3043E07CF192D9CD44B0474F29CC49') 'Fresh MSI hash differs from the qualified package.'
+            Assert-Setup ((Get-FileHash -LiteralPath $freshPackage -Algorithm SHA256).Hash -eq $packageReference.Sha256) 'Fresh MSI hash differs from the qualified package.'
             Assert-Setup ((Get-AuthenticodeSignature -LiteralPath $freshPackage).Status -eq 'Valid') 'Fresh MSI signature is not valid.'
             Assert-Setup (@(Get-ChildItem -LiteralPath $freshDirectory -Filter '*.part').Count -eq 0) 'Fresh download left an incomplete file.'
             Write-Output 'OPENVPN_FRESH_DOWNLOAD_TEST windows_powershell_51=true cache_used=false hash=true signature=true installation=false'
@@ -149,6 +163,13 @@ try {
             foreach ($partialFile in @(Get-ChildItem -LiteralPath $freshDirectory -Filter '*.part' -File)) { Remove-Item -LiteralPath $partialFile.FullName }
             Remove-Item -LiteralPath $freshDirectory
         }
+    }
+    if ($Arm64Package) {
+        Test-OfficialOpenVpnPackage $Arm64Package 'Arm64'; $checks++
+        $rejected = $false
+        try { Test-OfficialOpenVpnPackage $Arm64Package 'X64' } catch { $rejected = $_.Exception.Message -like '*Empreinte*' }
+        Assert-Setup $rejected 'A genuine ARM64 MSI must never replace the pinned AMD64 package.'
+        Write-Output 'OPENVPN_ARM64_PACKAGE_TEST hash=true signature=true wrong_architecture_rejected=true installation=false'
     }
     Write-Output "OPENVPN_SETUP_TEST checks=$checks missing_offer=true incomplete_offer=true cancellation=true reboot=true precise_errors=true no_installation=true"
 } finally {

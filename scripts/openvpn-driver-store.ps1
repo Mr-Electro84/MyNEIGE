@@ -2,14 +2,14 @@
 # service or a copy under System32\drivers yet. Never create a network adapter.
 function Get-OpenVpnTapDriver {
     if (!('MyNeige.TapDriverStore' -as [type])) {
-        Add-Type -TypeDefinition @'
+        $source = @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 namespace MyNeige {
     public static class TapDriverStore {
         const uint ClassDriver = 1;
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = TAP_PACK)]
         struct DriverInfo {
             public uint Size, Type;
             public UIntPtr Reserved;
@@ -19,7 +19,7 @@ namespace MyNeige {
             public System.Runtime.InteropServices.ComTypes.FILETIME Date;
             public ulong Version;
         }
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = TAP_PACK)]
         struct DriverDetail {
             public uint Size;
             public System.Runtime.InteropServices.ComTypes.FILETIME Date;
@@ -88,6 +88,10 @@ namespace MyNeige {
     }
 }
 '@
+        # setupapi.h impose pack(1) aux processus 32 bits et pack(8) aux 64 bits.
+        # Windows PowerShell peut etre x86 meme sur un systeme ARM64.
+        $packing = if ([IntPtr]::Size -eq 8) { '8' } else { '1' }
+        Add-Type -TypeDefinition ($source.Replace('TAP_PACK', $packing))
     }
     return [MyNeige.TapDriverStore]::Find()
 }

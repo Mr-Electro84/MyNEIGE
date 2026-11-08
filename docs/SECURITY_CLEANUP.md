@@ -50,3 +50,11 @@ L’audit de l’état courant a révélé que `BrowserPilot::prepare` copiait t
 Après accord explicite du mainteneur, le correctif rétablit des sources versionnées sous `native/windows/vault/`, avec seulement les utilitaires locaux, le hachage et la validation du profil sous `native/windows/shared/`. Le contrôleur ne contient plus les points d’entrée du coffre. `scripts/build-vault.ps1` utilise une liste fermée de sources et contrôle les imports pour refuser sockets, WFP, WinHTTP et lancement de processus. Le staging exige ce vrai binaire et refuse une empreinte identique à celle du contrôleur. Les deux vérificateurs de manifeste exigent aussi le coffre séparé.
 
 Les fichiers détectés n’ont été ni restaurés ni relancés. Aucun réglage Defender, exclusion, désactivation ou envoi du binaire à un service externe n’a été effectué. Les nouvelles compilations correspondent à ces sources corrigées. Les tests exécutés avant la récidive restent des preuves fonctionnelles limitées ; ils ne clôturent pas cet incident. Les contrôles effectués après correction sont consignés dans le guide de développement, sans qualification de faux positif par Microsoft.
+
+### Détection du 8 novembre 2026 — séparation des relais
+
+Les événements Defender confirment deux détections sur le contrôleur de développement à 18 h 49 et 18 h 51, suivies d’une quarantaine réussie. Le coffre dédié est présent dans les sources, mais les relais étaient encore des copies du contrôleur. L’utilisateur a choisi de remplacer ces copies par des exécutables limités à leurs tâches.
+
+Le correctif ajoute `myneige-relay.exe` et `myneige-public-relay.exe`, à rôles fixes, sans WFP, lancement de processus ni fonctions du coffre. Les sondes de développement sont séparées. Le staging refuse un auxiliaire identique au contrôleur et ne propose aucune autocopie de secours. Les identités WFP et les protections réseau sont conservées. Voir [la séparation et ses validations](RELAY_EXECUTABLES.md).
+
+Cette modification ne clôture pas automatiquement l’incident antivirus. Les fichiers placés en quarantaine ne sont ni restaurés ni relancés, et aucune exclusion Defender n’est ajoutée. Aucun binaire n’est envoyé à un service externe et aucune distribution n’est construite.

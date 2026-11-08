@@ -97,16 +97,6 @@ static bool sameFile(const std::filesystem::path &a, const std::filesystem::path
     return one.dwVolumeSerialNumber == two.dwVolumeSerialNumber && one.nFileIndexHigh == two.nFileIndexHigh &&
            one.nFileIndexLow == two.nFileIndexLow;
 }
-int runtimeCacheProbe(const std::filesystem::path &path) {
-    requirePrivilegedParent();
-    require(!isAdministrator(), "Runtime cache probe must not be elevated");
-    require(sha256File(path) == sha256Text("abc"), "Unprivileged runtime read failed");
-    Handle writable(CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr));
-    require(writable.h == INVALID_HANDLE_VALUE && GetLastError() == ERROR_ACCESS_DENIED,
-            "Unprivileged process can write runtime cache");
-    std::cout << "CACHE_READ_ONLY" << std::endl;
-    return 0;
-}
 int runtimeCacheTest(const std::filesystem::path &projectRoot) {
     require(isAdministrator(), "runtime-cache-test requires elevation");
     auto mutex = sessionMutex();
@@ -133,7 +123,7 @@ int runtimeCacheTest(const std::filesystem::path &projectRoot) {
     require(sameFile(one, two), "Second session copied runtime bytes instead of linking");
     require(!sameFile(one, source / L"electron.exe"), "Cache is hard-linked to writable source");
     Job job;
-    auto child = job.spawn(staging.executable.wstring(), {L"runtime-cache-probe", two.wstring()}, true, true);
+    auto child = job.spawn(staging.diagnostic().wstring(), {L"runtime-cache-probe", two.wstring()}, true, true);
     require(child.line(10000) == "CACHE_READ_ONLY", "Cached runtime is not read-only for the browser token");
     child.stop();
     writeFixture(source / L"electron.exe", "new-version");

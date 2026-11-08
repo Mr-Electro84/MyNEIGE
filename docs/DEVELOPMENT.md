@@ -4,7 +4,7 @@ Ce guide complète le [README](../README.md), qui décrit l’état actuel du pr
 
 ## Préparer le poste de développement
 
-La cible actuelle est Windows 11 x64. Installer Node.js/npm et Visual Studio 2022 ou les Build Tools avec les outils C++ x64/x86 et le SDK Windows 10/11. Le script de compilation détecte Visual Studio avec `vswhere`, initialise son environnement x64 et compile le contrôleur en C++20. Aucune dépendance C++ externe ni restauration NuGet n’est nécessaire.
+La cible binaire reste Windows 11 x64, avec exécution sous émulation x64 sur Windows ARM64 préparée mais restant à qualifier. Le poste de compilation de référence reste x64. Installer Node.js/npm et Visual Studio 2022 ou les Build Tools avec les outils C++ x64/x86 et le SDK Windows 10/11. Le script de compilation détecte Visual Studio avec `vswhere`, initialise son environnement x64 et compile le contrôleur en C++20. Aucune dépendance C++ externe ni restauration NuGet n’est nécessaire. Avec Node.js ARM64, définir `$env:ELECTRON_INSTALL_ARCH = 'x64'` avant `npm ci` ; voir le [guide ARM64](WINDOWS_ARM64.md).
 
 Depuis la racine du dépôt :
 
@@ -158,4 +158,4 @@ Le site se trouve dans `website/`, avec une feuille CSS séparée et sans dépen
 
 ## Retrait de la configuration VPN et alerte Defender
 
-Consulter le [compte rendu de sécurité et sa mise à jour du 2 novembre 2026](SECURITY_CLEANUP.md). La récidive a mis en évidence l’absence du correctif annoncé dans les sources : le coffre était encore une copie du contrôleur. Après accord du mainteneur, `scripts/build-vault.ps1` compile désormais un coffre réellement séparé ; `poc:build` produit les deux composants et le staging refuse leur confusion. Les fichiers détectés ne doivent pas être restaurés ou relancés pour poursuivre une recette. Les contrôles antivirus des nouveaux fichiers ne constituent pas une analyse rétroactive du binaire détecté.
+Consulter le [compte rendu de sécurité et sa mise à jour du 2 novembre 2026](SECURITY_CLEANUP.md). La récidive a mis en évidence l’absence du correctif annoncé dans les sources : le coffre était encore une copie du contrôleur. Après accord du mainteneur, `scripts/build-vault.ps1` compile désormais un coffre réellement séparé ; `poc:build` produit le contrôleur, le coffre, les deux relais dédiés et les sondes de développement ; le staging refuse leur confusion. La séparation des relais du 8 novembre est décrite dans [RELAY_EXECUTABLES.md](RELAY_EXECUTABLES.md). Les fichiers détectés ne doivent pas être restaurés ou relancés pour poursuivre une recette. Les contrôles antivirus des nouveaux fichiers ne constituent pas une analyse rétroactive du binaire détecté.

@@ -12,9 +12,8 @@ function Show-MyneigeMessage([string]$Message, [string]$Icon = 'Warning') {
 }
 try {
     . (Join-Path $PSScriptRoot 'distribution-common.ps1')
-    if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() -ne 'X64' -or [Environment]::OSVersion.Version.Build -lt 22000) {
-        throw 'Cette Alpha requiert Windows 11 x64.'
-    }
+    . (Join-Path $PSScriptRoot 'windows-platform.ps1')
+    Assert-MyneigeHost
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $admin = ([Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if ($admin -and !$CheckOnly) { throw "Lancez MyNEIGE normalement, sans executer le lanceur en tant qu'administrateur. Seul le controleur demandera une elevation UAC." }

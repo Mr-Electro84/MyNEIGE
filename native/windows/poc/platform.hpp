@@ -1,25 +1,10 @@
 #pragma once
 #include "common.hpp"
+#include "../shared/network-platform.hpp"
+#include "../shared/worker-origin.hpp"
 namespace neige {
-struct Adapter {
-    uint32_t index = 0;
-    uint64_t luid = 0;
-    uint32_t address = 0;
-    bool preferred = false;
-    std::string name;
-    std::string guid;
-    std::vector<uint32_t> dns;
-};
-std::vector<Adapter> adapters();
-Adapter adapterFor(uint32_t address);
 Adapter idleAdapterByName(const std::wstring &name);
-Socket vpnSocket(const Adapter &adapter, int type, int protocol);
 Adapter publicNetwork();
-Socket boundNetworkSocket(const Adapter &adapter, int type, int protocol);
-std::vector<uint32_t> resolveVpn(const Adapter &adapter, const std::vector<uint32_t> &dns, const std::string &host,
-                               bool publicNetwork = false);
-std::vector<uint32_t> resolveVpnTcp(const Adapter &adapter, const std::vector<uint32_t> &dns, const std::string &host);
-void reportFlow(const char *role, const char *protocol, SOCKET socket, uint32_t destination, uint16_t port);
 struct NetworkSnapshot {
     std::set<std::string> routes;
     std::map<uint64_t, std::string> interfaces;
@@ -55,6 +40,7 @@ struct Job {
 };
 struct Staging {
     std::filesystem::path directory, executable, profile, publicExecutable;
+    std::filesystem::path diagnostic();
     Staging();
     ~Staging();
     void allowUserRead();
@@ -97,8 +83,6 @@ void removeProtectedTree(const std::filesystem::path &path, const std::filesyste
                          bool runtimeCacheCleanup = false);
 void verifyProtectedDirectory(const std::filesystem::path &path, bool runtimeCacheCleanup = false);
 void createProtectedDirectory(const std::filesystem::path &path);
-void requirePrivilegedParent();
-int securityProbe();
 int privilegeTest();
 void protectSupervisor();
 } // namespace neige

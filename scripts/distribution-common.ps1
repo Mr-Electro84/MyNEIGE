@@ -48,9 +48,9 @@ function Test-DistributionPayload([string]$Root) {
             throw "Fichier du programme manquant ou altere : $($entry.path). Reinstallez MyNEIGE ou extrayez a nouveau l'archive complete."
         }
     }
-    foreach ($required in @('MyNEIGE.exe','bin/myneige-controller.exe','bin/myneige-vault.exe','resources/runtime/electron.exe',
+    foreach ($required in @('MyNEIGE.exe','bin/myneige-controller.exe','bin/myneige-vault.exe','bin/myneige-relay.exe','bin/myneige-public-relay.exe','resources/runtime/electron.exe',
         'src/main/index.js','src/main/about.js','package.json','LICENSE',
-        'scripts/launch-distribution.ps1','scripts/run-distribution-worker.ps1','scripts/openvpn-setup.ps1')) {
+        'scripts/launch-distribution.ps1','scripts/run-distribution-worker.ps1','scripts/openvpn-setup.ps1','scripts/windows-platform.ps1')) {
         if (!$seen.ContainsKey($required)) { throw "Fichier obligatoire absent du manifeste : $required" }
     }
     $metadata = Get-Content -LiteralPath (Join-Path $Root 'package.json') -Raw | ConvertFrom-Json

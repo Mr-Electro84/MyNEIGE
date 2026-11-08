@@ -10,28 +10,11 @@ int wmain(int argc, wchar_t **argv) {
             std::cout << "MYNEIGE_SETUP_PROTOCOL=1\n";
             return 0;
         }
-        if (command == "runtime-cache-probe") {
-            neige::require(argc == 3, "Missing runtime cache probe path");
-            return neige::runtimeCacheProbe(argv[2]);
-        }
         neige::Winsock sockets;
         if (command == "self-test")
             return neige::selfTest();
-        if (command == "relay-worker")
-            return neige::relayWorker();
-        if (command == "public-relay-worker")
-            return neige::relayWorker(true);
-        if (command == "security-probe")
-            return neige::securityProbe();
         if (command == "privilege-test")
             return neige::privilegeTest();
-        if (command == "blocked-probe" || command == "blocked-probe-v6" || command == "bound-probe") {
-            neige::require(argc == 3, "Missing probe port");
-            auto port = std::stoul(argv[2]);
-            neige::require(port > 0 && port <= 65535, "Invalid probe port");
-            return neige::blockedProbe(static_cast<uint16_t>(port), command == "blocked-probe-v6",
-                                       command == "bound-probe");
-        }
         if (command == "wfp-test")
             return neige::wfpTest();
         if (command == "cleanup") {

@@ -5,3 +5,4 @@ safer-buffer
 tweetnacl
 @xterm/xterm
 @xterm/addon-fit
+@xterm/addon-search

@@ -2,11 +2,14 @@
 param([switch]$Worker, [switch]$ForgetCredentials, [string]$OpenVpn)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'windows-platform.ps1')
+Assert-MyneigeHost
 $binary = Join-Path $root '.local\poc\myneige-poc.exe'
 if ($ForgetCredentials) {
     if (!(Test-Path -LiteralPath $binary)) { throw 'Compiler le pilote avant le lancement.' }
     & (Join-Path $root '.local\poc\myneige-vault.exe') vault-forget; exit $LASTEXITCODE
 }
+Assert-MyneigeX64Runtime (Join-Path $root 'node_modules\electron\dist\electron.exe')
 $out = Join-Path $root '.local\browser'
 New-Item -ItemType Directory -Path $out -Force | Out-Null
 if (!$Worker) {

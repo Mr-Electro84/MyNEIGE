@@ -1,10 +1,15 @@
-#include "platform.hpp"
-
+#include "worker.hpp"
 namespace neige {
+static constexpr bool publicMode = MYNEIGE_PUBLIC_RELAY != 0;
 static std::string configLine() {
     std::string value;
-    require(bool(std::getline(std::cin, value)), "Relay configuration pipe closed");
-    require(value.size() <= 2048 && value.find('\r') == std::string::npos, "Invalid relay configuration");
+    for (;;) {
+        const int c = std::cin.get();
+        require(c != EOF, "Relay configuration pipe closed");
+        if (c == '\n') break;
+        require(value.size() < 2048 && c != '\r' && c != 0, "Invalid relay configuration");
+        value.push_back(static_cast<char>(c));
+    }
     return value;
 }
 static bool forbiddenDestination(uint32_t ip, const Adapter &vpn) {
@@ -54,7 +59,7 @@ static void tunnel(SOCKET client, SOCKET remote, bool ssh = false) {
     }
     std::osyncstream(std::cout) << "FLOW " << up << " " << down << std::endl;
 }
-int relayWorker(bool publicMode) {
+int relayWorker() {
     requirePrivilegedParent();
     require(!isAdministrator(), "Relay must run without administrator rights");
     require(GetFileType(GetStdHandle(STD_INPUT_HANDLE)) == FILE_TYPE_PIPE,
@@ -89,7 +94,7 @@ int relayWorker(bool publicMode) {
                 current.name == vpn.name,
             "VPN interface changed before relay start");
     std::vector<uint32_t> addresses;
-    if (!publicMode) {
+    if constexpr (!publicMode) {
         addresses = resolveVpn(vpn, dns, host);
         auto tcpAddresses = resolveVpnTcp(vpn, dns, host);
         require(!tcpAddresses.empty(), "No usable DNS TCP response");
@@ -122,7 +127,7 @@ int relayWorker(bool publicMode) {
             }
             continue;
         }
-        std::thread([client = std::move(client), vpn, dns, host, expected, expectedSsh, scope, publicMode, publicPort]() mutable {
+        std::thread([client = std::move(client), vpn, dns, host, expected, expectedSsh, scope, publicPort]() mutable {
             struct Count {
                 bool reserved = false, publicRoute = false;
                 ~Count() {
@@ -151,7 +156,7 @@ int relayWorker(bool publicMode) {
                     return;
                 }
                 count.publicRoute = scope == "university" && publicServiceHost(request.host);
-                if (!publicMode) {
+                if constexpr (!publicMode) {
                     count.reserved = slots.acquire(count.publicRoute);
                     if (!count.reserved) {
                         std::osyncstream(std::cout) << "RELAY_CAPACITY limit=32" << std::endl;
@@ -159,7 +164,8 @@ int relayWorker(bool publicMode) {
                         return;
                     }
                 }
-                if (!publicMode && scope == "university" && publicServiceHost(request.host)) {
+                if constexpr (!publicMode) {
+                  if (scope == "university" && publicServiceHost(request.host)) {
                     // Le relais VPN ne résout jamais ces noms. Le second relais
                     // revérifie la liste publique avant toute résolution locale.
                     stage = "CONNECT";
@@ -173,6 +179,7 @@ int relayWorker(bool publicMode) {
                     // quelle ; TLS, cookies et corps POST restent de bout en bout.
                     tunnel(client.s, upstream.s);
                     return;
+                  }
                 }
                 // No resolver cache: every new CONNECT is resolved through the VPN.
                 stage = "DNS";
@@ -213,27 +220,6 @@ int relayWorker(bool publicMode) {
                     << " wsa=" << (std::string(stage) == "CONNECT" || std::string(stage) == "TUNNEL" ? code : 0) << std::endl;
             }
         }).detach();
-    }
-}
-int blockedProbe(uint16_t port, bool ipv6, bool bound) {
-    Socket socket = bound ? vpnSocket(adapterFor(0x7f000001), SOCK_STREAM, IPPROTO_TCP)
-                          : Socket(::socket(ipv6 ? AF_INET6 : AF_INET, SOCK_STREAM, IPPROTO_TCP));
-    require(socket.s != INVALID_SOCKET, "Cannot create quarantine probe");
-    try {
-        if (ipv6) {
-            sockaddr_in6 address{};
-            address.sin6_family = AF_INET6;
-            address.sin6_addr = in6addr_loopback;
-            address.sin6_port = htons(port);
-            connectWithinAddress(socket.s, reinterpret_cast<sockaddr *>(&address), sizeof(address), 2000);
-        } else
-            connectWithin(socket.s, endpoint(0x7f000001, port), 2000);
-        std::cout << "UNEXPECTED_CONNECT" << std::endl;
-        return 4;
-    } catch (const std::exception &) {
-        int code = WSAGetLastError();
-        std::cout << "BLOCK_RESULT " << code << std::endl;
-        return code == WSAEACCES ? 0 : 5;
     }
 }
 } // namespace neige

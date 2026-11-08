@@ -1,5 +1,73 @@
 # Shared decisions and orchestration. All network, UI and installer effects are
 # supplied by the caller so the missing/incomplete paths can be tested safely.
+function Get-OpenVpnPackageReference([string]$Architecture) {
+    switch ($Architecture) {
+        'X64' { return [pscustomobject]@{ FileName = 'OpenVPN-2.7.8-I001-amd64.msi'; Sha256 = '1EA61A3056905B90607D4B0F084C04E5CF3043E07CF192D9CD44B0474F29CC49'; Machine = 0x8664 } }
+        'Arm64' { return [pscustomobject]@{ FileName = 'OpenVPN-2.7.8-I001-arm64.msi'; Sha256 = '6FC0E8899CC5275EE297FB837BC84AA2BC49F8EF96D7AD93EE3FEE1E7163A25C'; Machine = 0xAA64 } }
+        default { throw "OpenVPN requiert Windows x64 ou ARM64 (architecture detectee : $Architecture)." }
+    }
+}
+function Test-OfficialOpenVpnPackage([string]$Path, [string]$Architecture) {
+    $reference = Get-OpenVpnPackageReference $Architecture
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf) -or (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -ne $reference.Sha256) {
+        throw 'Empreinte OpenVPN differente du paquet officiel de cette architecture.'
+    }
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -ne 'OpenVPN Inc.') {
+        throw 'Signature ou editeur du MSI OpenVPN non valide.'
+    }
+}
+function Test-OpenVpnToolArchitecture([string]$Path, [string]$Architecture) {
+    $reference = Get-OpenVpnPackageReference $Architecture
+    try { return (Get-MyneigePeMachine $Path) -eq $reference.Machine }
+    catch { return $false }
+}
+function Get-OpenVpnRegistryInventory {
+    # Les vues explicites retrouvent aussi une installation ARM64 depuis PowerShell x86.
+    $candidates = @(); $registered = @()
+    foreach ($view in @([Microsoft.Win32.RegistryView]::Registry64, [Microsoft.Win32.RegistryView]::Registry32)) {
+        $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $view)
+        try {
+            $configuration = $base.OpenSubKey('SOFTWARE\OpenVPN')
+            if ($configuration) {
+                try {
+                    $exe = $configuration.GetValue('exe_path'); $bin = $configuration.GetValue('bin_dir')
+                    if ($exe) { $candidates += [string]$exe }
+                    if ($bin) { $candidates += Join-Path $bin 'openvpn.exe' }
+                } finally { $configuration.Dispose() }
+            }
+            $uninstall = $base.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall')
+            if ($uninstall) {
+                try {
+                    foreach ($name in $uninstall.GetSubKeyNames()) {
+                        # Une application tierce peut proteger sa propre cle de desinstallation.
+                        try { $entry = $uninstall.OpenSubKey($name) }
+                        catch [System.Security.SecurityException] { continue }
+                        catch [System.UnauthorizedAccessException] { continue }
+                        if (!$entry) { continue }
+                        try {
+                            $displayName = $entry.GetValue('DisplayName')
+                            if ($displayName -like 'OpenVPN*') {
+                                $registered += [pscustomobject]@{ DisplayName = $displayName; InstallLocation = $entry.GetValue('InstallLocation') }
+                            }
+                        } finally { $entry.Dispose() }
+                    }
+                } finally { $uninstall.Dispose() }
+            }
+        } finally { $base.Dispose() }
+    }
+    return [pscustomobject]@{ Candidates = $candidates; Registered = $registered }
+}
+function Test-OpenVpnMsiRegistered([string]$Product) {
+    foreach ($view in @([Microsoft.Win32.RegistryView]::Registry64, [Microsoft.Win32.RegistryView]::Registry32)) {
+        $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $view)
+        try {
+            $entry = $base.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + $Product)
+            if ($entry) { $entry.Dispose(); return $true }
+        } finally { $base.Dispose() }
+    }
+    return $false
+}
 function Invoke-OpenVpnNativeCommand {
     param([string]$Binary, [string[]]$Arguments)
     $previous = $ErrorActionPreference
@@ -36,7 +104,7 @@ function Get-OpenVpnDecision {
         return [pscustomobject]@{ State = 'Ready'; Path = $Validated[0]; Message = '' }
     }
     if (@($Existing | Where-Object { $_ -notin $Validated -and $_ -notin $Partial }).Count) {
-        return [pscustomobject]@{ State = 'Unsupported'; Path = ''; Message = 'Des fichiers OpenVPN existent, mais leur version ou leur signature ne correspond pas au moteur Community attendu. Aucune installation existante ne sera remplacee automatiquement.' }
+        return [pscustomobject]@{ State = 'Unsupported'; Path = ''; Message = 'Des fichiers OpenVPN existent, mais leur architecture, version ou signature ne correspond pas au moteur Community attendu. Sur ARM64, installer OpenVPN Community ARM64 avec TAP. Aucune installation existante ne sera remplacee automatiquement.' }
     }
     $community = @($Registered | Where-Object { $_.DisplayName -notlike 'OpenVPN Connect*' })
     if ($Validated.Count -or $Partial.Count -or $community.Count) {
@@ -47,9 +115,9 @@ function Get-OpenVpnDecision {
 function Invoke-OpenVpnPreparation {
     param($State, [string]$Architecture, [scriptblock]$Confirm, [scriptblock]$Download,
           [scriptblock]$InstallPackage, [scriptblock]$Recheck)
+    $null = Get-OpenVpnPackageReference $Architecture
     if ($State.State -eq 'Ready') { return [pscustomobject]@{ Status = 'Ready'; Path = $State.Path; Code = 0 } }
     if ($State.State -eq 'Unsupported') { throw $State.Message }
-    if ($Architecture -ne 'X64') { throw "Installation automatique disponible pour Windows x64 uniquement (architecture detectee : $Architecture)." }
     if (!(& $Confirm $State)) { return [pscustomobject]@{ Status = 'Cancelled'; Path = ''; Code = 2 } }
     $package = & $Download
     $code = & $InstallPackage $package

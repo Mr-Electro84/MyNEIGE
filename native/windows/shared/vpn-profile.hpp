@@ -1,6 +1,5 @@
 #pragma once
-#include "core.hpp"
+#include "host.hpp"
 namespace neige {
-bool validHost(const std::string &host);
 std::string normalizeProfile(const std::string &source);
 }

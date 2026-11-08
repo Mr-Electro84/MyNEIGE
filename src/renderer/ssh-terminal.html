@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="ssh.css">
   <script src="../../node_modules/@xterm/xterm/lib/xterm.js" defer></script>
   <script src="../../node_modules/@xterm/addon-fit/lib/addon-fit.js" defer></script>
+  <script src="../../node_modules/@xterm/addon-search/lib/addon-search.js" defer></script>
+  <script src="terminal-buffer.js" defer></script>
   <script src="ssh-terminal.js" defer></script>
 </head>
 <body class="terminal-window">
@@ -16,7 +18,33 @@
     <div class="actions"><button id="connect" type="button">Se connecter</button><button id="manual" type="button">Saisir les identifiants…</button><button id="disconnect" type="button" disabled>Déconnecter</button></div>
   </header>
   <p id="status" role="status" aria-live="polite">Préparation de la connexion…</p>
-  <main id="terminal" aria-label="Terminal SSH du serveur pédagogique"></main>
-  <footer>Les commandes s’exécutent sur le serveur universitaire. Fermer cette fenêtre termine la connexion SSH.</footer>
+  <nav class="terminal-toolbar" aria-label="Outils du terminal">
+    <div class="actions">
+      <button id="copy" type="button" disabled title="Copier la sélection (Ctrl+Maj+C)">Copier</button>
+      <button id="paste" type="button" disabled title="Coller (Ctrl+Maj+V)">Coller</button>
+      <button id="find" type="button" title="Rechercher (Ctrl+Maj+F)">Rechercher</button>
+      <button id="export" type="button" title="Enregistrer le contenu conservé (Ctrl+Maj+S)">Enregistrer…</button>
+      <button id="more" type="button" aria-label="Autres actions du terminal">Autres actions…</button>
+    </div>
+    <div class="actions zoom-controls" aria-label="Taille du texte">
+      <button id="zoom-out" type="button" aria-label="Réduire le texte" title="Ctrl+−">−</button>
+      <button id="zoom-reset" type="button" title="Taille par défaut (Ctrl+0)">14 px</button>
+      <button id="zoom-in" type="button" aria-label="Agrandir le texte" title="Ctrl++">+</button>
+    </div>
+  </nav>
+  <section id="search-bar" class="search-bar" aria-label="Recherche dans le terminal" hidden>
+    <input id="search-input" type="search" aria-label="Texte à rechercher" placeholder="Rechercher dans le contenu conservé" maxlength="256" autocomplete="off" spellcheck="false">
+    <label><input id="search-case" type="checkbox">Respecter la casse</label>
+    <label><input id="search-word" type="checkbox">Mot entier</label>
+    <span id="search-results" role="status" aria-live="polite"></span>
+    <button id="search-previous" type="button" aria-label="Occurrence précédente" title="Maj+Entrée">↑</button>
+    <button id="search-next" type="button" aria-label="Occurrence suivante" title="Entrée">↓</button>
+    <button id="search-close" type="button" aria-label="Fermer la recherche" title="Échap">×</button>
+  </section>
+  <div class="terminal-area">
+    <main id="terminal" aria-label="Terminal SSH du serveur pédagogique"></main>
+    <button id="bottom" type="button" hidden>Aller en bas ↓</button>
+  </div>
+  <footer><span>Contenu conservé : 3 000 lignes d’historique maximum. Fermer cette fenêtre termine SSH.</span><span id="terminal-notice" role="status" aria-live="polite"></span></footer>
 </body>
 </html>

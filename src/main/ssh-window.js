@@ -4,6 +4,7 @@ const { pathToFileURL } = require('node:url');
 const { APP_ICON } = require('./app-icon');
 const { validateCredentials } = require('./policy');
 const { SSH_HOST, createSshConnection, createHostVerifier } = require('./ssh');
+const { createTerminalTools } = require('./terminal-tools');
 
 // L'authentification Hello refusée reste une annulation. La saisie manuelle est un choix explicite.
 async function acquireSshCredentials({ vault, handle, fingerprint, prompt, current, manual = false }) {
@@ -31,11 +32,14 @@ async function acquireSshCredentials({ vault, handle, fingerprint, prompt, curre
 }
 
 function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, fingerprint, ready,
-  proxy, knownHostFile, show = true, connectionFactory = createSshConnection }) {
+  proxy, knownHostFile, show = true, connectionFactory = createSshConnection,
+  clipboard = require('electron').clipboard, Menu = require('electron').Menu, saveText }) {
   const terminalFile = path.join(__dirname, '../renderer/ssh-terminal.html');
   const credentialsFile = path.join(__dirname, '../renderer/ssh-credentials.html');
   const terminalURL = pathToFileURL(terminalFile).href, credentialsURL = pathToFileURL(credentialsFile).href;
   let window, loaded, promptWindow, resolvePrompt, connection, epoch = 0, busy = false, disposed = false;
+  let sshConnected = false;
+  const tools = createTerminalTools({ clipboard, dialog, save: saveText });
   const alive = () => !disposed && ready() && window && !window.isDestroyed();
   const trusted = (event, owner, url) => owner && !owner.isDestroyed() && event.sender === owner.webContents &&
     event.senderFrame === owner.webContents.mainFrame && event.senderFrame.url === url;
@@ -49,7 +53,8 @@ function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, 
     created.webContents.on('will-navigate', event => event.preventDefault());
     created.webContents.on('will-attach-webview', event => event.preventDefault());
     created.webContents.on('before-input-event', (event, input) => {
-      if (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r')) event.preventDefault();
+      if (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r' &&
+          (preload !== 'ssh-terminal.js' || input.shift))) event.preventDefault();
     });
     return created;
   }
@@ -72,7 +77,7 @@ function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, 
     });
   }
   function invalidate() {
-    ++epoch; busy = false; finishPrompt(); vault.cancelActive();
+    ++epoch; busy = false; sshConnected = false; finishPrompt(); vault.cancelActive();
     connection?.stop(); connection = undefined; state('closed');
   }
   function close() {
@@ -83,6 +88,7 @@ function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, 
   async function authenticate(manual = false) {
     if (!alive() || busy) return;
     busy = true; const attempt = ++epoch, owner = window;
+    sshConnected = false;
     connection?.stop(); connection = undefined;
     const current = () => alive() && window === owner && epoch === attempt;
     let credentials;
@@ -104,7 +110,7 @@ function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, 
       const transport = proxy();
       connection = connectionFactory({ ...transport, ready: current, verifyHost,
         onData: chunk => { if (current()) owner.webContents.send('myneige:ssh-data', { epoch: attempt, bytes: chunk }); },
-        onState: value => { if (current()) state(value); } });
+        onState: value => { if (current()) { sshConnected = value === 'connected'; state(value); } } });
       await connection.start(credentials);
     } catch { if (current()) state('error'); }
     finally { if (credentials) credentials.username = credentials.password = ''; if (epoch === attempt) busy = false; }
@@ -116,11 +122,39 @@ function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, 
   });
   ipcMain.on('myneige:ssh-action', (event, action, value) => {
     if (!alive() || !trusted(event, window, terminalURL)) return;
-    if (action === 'input') connection?.input(value);
+    if (action === 'input') {
+      if (connection?.input(value) === false) window.webContents.send('myneige:ssh-notice', 'input-rejected');
+    }
     else if (action === 'resize') connection?.resize(value);
     else if (action === 'ack' && value?.epoch === epoch) connection?.acknowledge(value.bytes);
     else if (action === 'connect' || action === 'manual') void authenticate(action === 'manual');
     else if (action === 'disconnect') invalidate();
+  });
+  ipcMain.handle('myneige:ssh-tools', (event, action, value) => {
+    if (!alive() || !trusted(event, window, terminalURL)) return { ok: false, reason: 'unavailable' };
+    const owner = window, generation = epoch;
+    const current = () => alive() && window === owner && epoch === generation;
+    if (action === 'context-menu') {
+      const command = name => { if (current()) owner.webContents.send('myneige:ssh-command', name); };
+      Menu.buildFromTemplate([
+        { label: 'Copier', enabled: value === true, click: () => command('copy') },
+        { label: 'Coller', enabled: sshConnected, click: () => command('paste') },
+        { label: 'Tout sélectionner', click: () => command('select-all') },
+        { type: 'separator' },
+        { label: 'Rechercher…', click: () => command('find') },
+        { label: 'Enregistrer la sortie…', click: () => command('export') },
+        { type: 'separator' },
+        { label: 'Effacer l’écran', click: () => command('clear-screen') },
+        { label: 'Effacer l’historique', click: () => command('clear-history') },
+        { type: 'separator' },
+        { label: 'Agrandir le texte', click: () => command('zoom-in') },
+        { label: 'Réduire le texte', click: () => command('zoom-out') },
+        { label: 'Taille par défaut', click: () => command('zoom-reset') },
+        { label: 'Aller en bas', click: () => command('bottom') }
+      ]).popup({ window: owner });
+      return { ok: true };
+    }
+    return tools(action, value, { owner, current, canPaste: () => current() && sshConnected });
   });
   return {
     async open(parent) {
@@ -129,7 +163,7 @@ function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, 
       if (!window) {
         created = true;
         const owner = window = secureWindow({ parent: parent && !parent.isDestroyed() ? parent : undefined,
-          title: 'MyNEIGE · Serveur pédagogique', width: 1060, height: 700, minWidth: 640, minHeight: 400 }, 'ssh-terminal.js');
+          title: 'MyNEIGE · Serveur pédagogique', width: 1060, height: 700, minWidth: 640, minHeight: 500 }, 'ssh-terminal.js');
         owner.once('closed', () => { if (window === owner) close(); });
         owner.webContents.once('render-process-gone', () => { if (window === owner) close(); });
         loaded = owner.loadFile(terminalFile);
@@ -146,6 +180,7 @@ function createSshWindow({ BrowserWindow, ipcMain, dialog, localSession, vault, 
       if (disposed) return;
       close(); disposed = true; vault.stop();
       ipcMain.removeHandler('myneige:ssh-credentials'); ipcMain.removeAllListeners('myneige:ssh-action');
+      ipcMain.removeHandler('myneige:ssh-tools');
     }
   };
 }

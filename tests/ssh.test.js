@@ -169,19 +169,20 @@ test('SSH : une clé refusée empêche toute authentification', async t => {
 
 test('SSH : sortie abondante ralentie, acquittements contrôlés et entrée bornée', async () => {
   let client, channel;
-  let pauses = 0, resumes = 0;
+  let pauses = 0, resumes = 0, stopped = false, writes = 0;
   const connection = createSshConnection({ ready: () => true, verifyHost: async () => true,
     connectProxy: async () => ({ resume() {}, destroy() {} }),
     clientFactory: () => {
       client = new EventEmitter(); client.config = {}; client.connect = () => {};
-      client.destroy = () => {}; client.shell = (_size, callback) => {
+      client.destroy = () => { stopped = true; }; client.shell = (_size, callback) => {
         channel = new EventEmitter(); channel.destroy = () => {}; channel.pause = () => ++pauses; channel.resume = () => ++resumes;
-        channel.write = () => {}; callback(null, channel);
+        channel.write = () => { ++writes; }; callback(null, channel);
       }; return client;
     }, onData: () => {}, onState: () => {} });
   await connection.start({ username: 'fictif', password: 'secret-fictif' }); client.emit('ready');
   channel.emit('data', Buffer.alloc(140000)); assert.equal(pauses, 1);
   connection.acknowledge(999999); assert.equal(resumes, 0);
   connection.acknowledge(140000); assert.equal(resumes, 1);
-  connection.input('x'.repeat(65537)); connection.stop();
+  assert.equal(connection.input('x'.repeat(65537)), false); assert.equal(stopped, false);
+  assert.equal(connection.input('ls\r'), true); assert.equal(writes, 1); connection.stop();
 });

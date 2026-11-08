@@ -1,20 +1,9 @@
 #include "vpn-profile.hpp"
+#include "host.hpp"
 #include <map>
 #include <set>
 #include <wincrypt.h>
 namespace neige {
-bool validHost(const std::string &host) {
-    if (host.empty() || host.size() > 253 || host.back() == '.')
-        return false;
-    for (const auto &label : split(host, '.')) {
-        if (label.empty() || label.size() > 63 || label.front() == '-' || label.back() == '-')
-            return false;
-        for (unsigned char c : label)
-            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-'))
-                return false;
-    }
-    return true;
-}
 std::string normalizeProfile(const std::string &source) {
     require(source.size() < 65536 && source.find('\0') == std::string::npos, "Profile too large or contains NUL");
     const std::map<std::string, std::string> allowed = {{"dev", "tun"},

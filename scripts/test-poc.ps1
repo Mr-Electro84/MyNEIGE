@@ -4,6 +4,9 @@ $ErrorActionPreference = 'Stop'
 & (Join-Path $PSScriptRoot 'build-poc.ps1')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $repoRoot = Split-Path -Parent $PSScriptRoot
+& (Join-Path $PSScriptRoot 'test-windows-platform.ps1')
+& (Join-Path $PSScriptRoot 'test-openvpn-setup.ps1')
+& (Join-Path $PSScriptRoot 'test-relays.ps1')
 & (Join-Path $repoRoot '.local\poc\myneige-poc.exe') self-test
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & (Join-Path $repoRoot '.local\poc\myneige-vault.exe') vault-self-test

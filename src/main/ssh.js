@@ -161,12 +161,12 @@ function createSshConnection({ port, secret, ready, verifyHost, onData, onState,
       finally { credentials.username = credentials.password = ''; }
     },
     input(value) {
-      if (stopped || !connected || !ready() || typeof value !== 'string' || !value.length) return;
+      if (stopped || !connected || !ready() || typeof value !== 'string' || !value.length) return false;
       const bytes = Buffer.byteLength(value, 'utf8');
-      if (bytes > 65536 || inputPending + bytes > HIGH_WATER) { finish('input-overflow'); return; }
+      if (bytes > 65536 || inputPending + bytes > HIGH_WATER) return false;
       inputPending += bytes;
-      try { stream.write(value, () => { inputPending = Math.max(0, inputPending - bytes); }); }
-      catch { finish('error'); }
+      try { stream.write(value, () => { inputPending = Math.max(0, inputPending - bytes); }); return true; }
+      catch { finish('error'); return false; }
     },
     resize(value) {
       if (stopped || !ready() || !terminalSize(value)) return;

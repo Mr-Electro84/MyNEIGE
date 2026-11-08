@@ -59,9 +59,9 @@ void validateDistribution(const std::filesystem::path &root) {
                 "Empreinte de manifeste invalide");
         require(lower(sha256File(root / name)) == lower(expected), "Fichier du programme manquant ou altere");
     }
-    for (const auto *required : {L"myneige.exe", L"bin/myneige-controller.exe", L"bin/myneige-vault.exe", L"resources/runtime/electron.exe",
+    for (const auto *required : {L"myneige.exe", L"bin/myneige-controller.exe", L"bin/myneige-vault.exe", L"bin/myneige-relay.exe", L"bin/myneige-public-relay.exe", L"resources/runtime/electron.exe",
              L"src/main/index.js", L"src/main/about.js", L"package.json", L"license",
-             L"scripts/launch-distribution.ps1", L"scripts/run-distribution-worker.ps1", L"scripts/openvpn-setup.ps1"})
+             L"scripts/launch-distribution.ps1", L"scripts/run-distribution-worker.ps1", L"scripts/openvpn-setup.ps1", L"scripts/windows-platform.ps1"})
         require(seen.count(required) != 0, "Fichier obligatoire absent du manifeste");
     require(readJson(root / L"package.json").GetNamedString(L"version") == manifest.GetNamedString(L"version"),
             "Versions du manifeste et du programme incoherentes");

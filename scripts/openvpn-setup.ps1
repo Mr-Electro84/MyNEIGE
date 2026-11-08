@@ -3,13 +3,12 @@ param([switch]$Install, [switch]$Ensure, [switch]$CheckOnly, [switch]$VerifyOnly
       [switch]$InstallWorker, [string]$Package, [string]$ResultFile, [string]$DownloadDirectory)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$filename = 'OpenVPN-2.7.8-I001-amd64.msi'
-$expectedHash = '1EA61A3056905B90607D4B0F084C04E5CF3043E07CF192D9CD44B0474F29CC49'
 $binary = Join-Path $repoRoot '.local\poc\myneige-poc.exe'
 $distributed = Test-Path -LiteralPath (Join-Path $repoRoot 'distribution.json') -PathType Leaf
 if ($distributed) { $binary = Join-Path $repoRoot 'bin\myneige-controller.exe' }
 . (Join-Path $PSScriptRoot 'openvpn-prerequisites.ps1')
 . (Join-Path $PSScriptRoot 'openvpn-driver-store.ps1')
+. (Join-Path $PSScriptRoot 'windows-platform.ps1')
 $script:setupStage = 'Detection'
 function Write-SetupResult([string]$Status, [string]$Path, [string]$Message, [int]$Code) {
     if ($ResultFile -and !$InstallWorker) {
@@ -32,32 +31,35 @@ trap {
     Write-Error -Message $message -ErrorAction Continue
     exit 1
 }
-function Test-OfficialPackage([string]$Path) {
-    if (!(Test-Path -LiteralPath $Path -PathType Leaf) -or (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -ne $expectedHash) { throw 'Empreinte OpenVPN differente du paquet officiel qualifie.' }
-    $signature = Get-AuthenticodeSignature -LiteralPath $Path
-    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -ne 'OpenVPN Inc.') { throw 'Signature ou editeur du MSI OpenVPN non valide.' }
-}
+# IsWow64Process2 identifie l'hote meme depuis un interpreteur emule.
+$architecture = Get-MyneigeNativeArchitecture
+$packageReference = Get-OpenVpnPackageReference $architecture
+$filename = $packageReference.FileName
+function Test-OfficialPackage([string]$Path) { Test-OfficialOpenVpnPackage -Path $Path -Architecture $architecture }
 function Get-OpenVpnState {
     $candidates = @((Join-Path $env:ProgramFiles 'OpenVPN\bin\openvpn.exe'))
+    if ($env:ProgramW6432) { $candidates += Join-Path $env:ProgramW6432 'OpenVPN\bin\openvpn.exe' }
     if (${env:ProgramFiles(x86)}) { $candidates += Join-Path ${env:ProgramFiles(x86)} 'OpenVPN\bin\openvpn.exe' }
-    foreach ($registry in @('HKLM:\SOFTWARE\OpenVPN','HKLM:\SOFTWARE\WOW6432Node\OpenVPN')) {
-        $configuration = Get-ItemProperty -LiteralPath $registry -ErrorAction SilentlyContinue
-        if ($configuration.exe_path) { $candidates += $configuration.exe_path }
-        if ($configuration.bin_dir) { $candidates += Join-Path $configuration.bin_dir 'openvpn.exe' }
-    }
-    $registered = @()
-    foreach ($registry in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*')) {
-        $registered += @(Get-ItemProperty -Path $registry -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'OpenVPN*' })
-    }
+    $inventory = Get-OpenVpnRegistryInventory
+    $candidates += $inventory.Candidates
+    $registered = @($inventory.Registered)
     foreach ($entry in $registered) { if ($entry.InstallLocation) { $candidates += Join-Path $entry.InstallLocation 'bin\openvpn.exe' } }
     $existing = @($candidates | Select-Object -Unique | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     $validated = @(); $partial = @(); $probeResults = @()
     foreach ($candidate in $existing) {
+        if (!(Test-OpenVpnToolArchitecture $candidate $architecture)) {
+            $probeResults += 'architecture_moteur_incompatible=true'
+            continue
+        }
         if (!(Test-Path -LiteralPath (Join-Path (Split-Path -Parent $candidate) 'tapctl.exe') -PathType Leaf)) {
             $signature = Get-AuthenticodeSignature -LiteralPath $candidate
             $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($candidate)
             if ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -in @('OpenVPN Inc.','OpenVPN, Inc.','OpenVPN Inc','OpenVPN Technologies, Inc.') -and
                 $version.FileMajorPart -eq 2 -and $version.FileMinorPart -eq 7 -and $version.FileBuildPart -ge 8) { $partial += $candidate }
+            continue
+        }
+        if (!(Test-OpenVpnToolArchitecture (Join-Path (Split-Path -Parent $candidate) 'tapctl.exe') $architecture)) {
+            $probeResults += 'architecture_tapctl_incompatible=true'
             continue
         }
         $probe = Invoke-OpenVpnNativeCommand -Binary $binary -Arguments @('openvpn-check','--openvpn',$candidate)
@@ -69,7 +71,7 @@ function Get-OpenVpnState {
     }
     $tapInf = Get-OpenVpnTapDriver
     $decision = Get-OpenVpnDecision -Existing $existing -Validated $validated -Partial $partial -Registered $registered -TapReady ([bool]$tapInf)
-    $details = ('moteurs_presents={0}; moteurs_valides={1}; tapctl_manquant={2}; paquet_TAP={3}' -f $existing.Count,$validated.Count,$partial.Count,([bool]$tapInf))
+    $details = ('architecture_hote={0}; moteurs_presents={1}; moteurs_valides={2}; tapctl_manquant={3}; paquet_TAP={4}' -f $architecture,$existing.Count,$validated.Count,$partial.Count,([bool]$tapInf))
     if ($probeResults.Count) { $details += '; ' + ($probeResults -join '; ') }
     $decision | Add-Member -NotePropertyName Details -NotePropertyValue $details
     $decision | Add-Member -NotePropertyName DriverInf -NotePropertyValue $tapInf
@@ -130,10 +132,9 @@ if ($InstallWorker) {
         # Repair only the exact MSI product already registered on this machine.
         # Do not force a repair/upgrade of another OpenVPN release.
         $product = Get-OpenVpnMsiProductCode $trusted
-        $sameProduct = (Test-Path -LiteralPath ('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + $product)) -or
-            (Test-Path -LiteralPath ('HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\' + $product))
+        $sameProduct = Test-OpenVpnMsiRegistered $product
         if ($sameProduct) { $arguments += @('REINSTALL=ALL','REINSTALLMODE=vomus') }
-        $installer = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\msiexec.exe') -WindowStyle Hidden -PassThru -ArgumentList $arguments
+        $installer = Start-Process -FilePath (Get-MyneigeSystemExecutable 'msiexec.exe') -WindowStyle Hidden -PassThru -ArgumentList $arguments
         $installer.WaitForExit()
         if ($installer.ExitCode -notin @(0,3010)) {
             if ($installer.ExitCode -ne 1602) {
@@ -182,10 +183,7 @@ if ($CheckOnly) {
     if ($state.State -eq 'Ready') { Write-Output $state.Path } else { Write-Output ('OPENVPN_' + $state.State.ToUpperInvariant()) }
     exit $code
 }
-# OSArchitecture is an API result, not an optional registry environment value.
-$architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 if (!$Ensure -and !$Install) {
-    if ($architecture -ne 'X64') { throw 'Ce pilote qualifie uniquement OpenVPN Windows x64.' }
     $null = Get-VerifiedPackage
     Write-SetupResult 'Downloaded' '' 'Paquet officiel verifie. Aucune installation effectuee.' 0
     Write-Output 'OPENVPN_PACKAGE_VERIFIED'
@@ -202,7 +200,7 @@ $result = Invoke-OpenVpnPreparation -State (Get-OpenVpnState) -Architecture $arc
     param($selected)
     $script:setupStage = 'Installation avec UAC'
     Write-Host 'MyNEIGE : paquet verifie. Installation OpenVPN avec UAC...'
-    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $powershell = Get-MyneigeSystemExecutable 'WindowsPowerShell\v1.0\powershell.exe'
     try {
         $worker = Start-Process -FilePath $powershell -Verb RunAs -WindowStyle Hidden -PassThru -WorkingDirectory $repoRoot -ArgumentList @(
             '-NoProfile','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"'),'-InstallWorker','-Package',('"'+$selected+'"'))

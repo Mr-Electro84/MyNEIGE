@@ -442,7 +442,7 @@ int wfpTest() {
         int length6 = sizeof(local6);
         require(getsockname(listener6.s, reinterpret_cast<sockaddr *>(&local6), &length6) == 0,
                 "Cannot read IPv6 test port");
-        firewall.install(staging.executable.wstring(), nullptr);
+        firewall.install(staging.diagnostic().wstring(), nullptr);
         // Reopen the management handle: installed quarantine must survive its owner's disconnect.
         wincheck(FwpmEngineClose0(firewall.engine), "Close WFP management connection");
         firewall.engine = nullptr;
@@ -452,27 +452,27 @@ int wfpTest() {
         connectWithin(unaffected.s, endpoint(0x7f000001, port));
         Socket unaffected6(socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP));
         connectWithinAddress(unaffected6.s, reinterpret_cast<sockaddr *>(&local6), sizeof(local6));
-        child = job.spawn(staging.executable.wstring(), {L"blocked-probe", std::to_wstring(port)});
+        child = job.spawn(staging.diagnostic().wstring(), {L"blocked-probe", std::to_wstring(port)});
         auto result = child.line(5000);
         require(result == "BLOCK_RESULT 10013",
                 "Quarantine was not proven by WSAEACCES; no VPN test should be started");
         child.stop();
         child =
-            job.spawn(staging.executable.wstring(), {L"blocked-probe-v6", std::to_wstring(ntohs(local6.sin6_port))});
+            job.spawn(staging.diagnostic().wstring(), {L"blocked-probe-v6", std::to_wstring(ntohs(local6.sin6_port))});
         result = child.line(5000);
         require(result == "BLOCK_RESULT 10013", "IPv6 quarantine was not proven by WSAEACCES");
         child.stop();
         // Exercise the actual permit rule (application + source + LUID), not just quarantine/removal.
         // install(nullptr) above did not block other applications on the loopback interface.
-        firewall.allowVpn(staging.executable.wstring(), adapterFor(0x7f000001));
-        child = job.spawn(staging.executable.wstring(), {L"bound-probe", std::to_wstring(port)});
+        firewall.allowVpn(staging.diagnostic().wstring(), adapterFor(0x7f000001));
+        child = job.spawn(staging.diagnostic().wstring(), {L"bound-probe", std::to_wstring(port)});
         auto permitResult = child.line(5000);
         if (permitResult != "UNEXPECTED_CONNECT")
             std::cout << "LOCAL_BOUND_PROBE_FAILURE " << permitResult << std::endl;
         require(permitResult == "UNEXPECTED_CONNECT", "Verified source/interface WFP permit did not work");
         child.stop();
         firewall.clear();
-        child = job.spawn(staging.executable.wstring(), {L"blocked-probe", std::to_wstring(port)});
+        child = job.spawn(staging.diagnostic().wstring(), {L"blocked-probe", std::to_wstring(port)});
         require(child.line(5000) == "UNEXPECTED_CONNECT", "Relay could not connect after owned WFP cleanup");
         child.stop();
         std::cout << "RESULT "
@@ -804,7 +804,7 @@ int connectSession(const Options &options) {
             std::cout << "PUBLIC_RELAY_READY interface=" << usualNetwork.index << " source=" << ipText(usualNetwork.address)
                       << " protected_services=VPN public_services=usual_network" << std::endl;
         }
-        relay = job.spawn(staging.executable.wstring(), {L"relay-worker"}, true, true);
+        relay = job.spawn(staging.executable.wstring(), {}, true, true);
         std::string configuration = relayConfiguration(vpn, dns, "www.appigs.univ-avignon.fr", token,
             options.browserMode ? "university" : "appigs", publicRelay.port);
         writePipe(relay.input.h, configuration);

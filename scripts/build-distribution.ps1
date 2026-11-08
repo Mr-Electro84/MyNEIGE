@@ -3,6 +3,7 @@ param([switch]$SkipNativeBuild, [switch]$SkipInstaller, [string]$NsisPath)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'distribution-common.ps1')
+. (Join-Path $PSScriptRoot 'windows-platform.ps1')
 $metadata = Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
 if (($metadata.revision -isnot [int] -and $metadata.revision -isnot [long]) -or
     $metadata.revision -lt 1 -or $metadata.revision -gt 9007199254740991) { throw 'Revision de mise a jour entiere positive attendue.' }
@@ -14,15 +15,18 @@ $payload = [IO.Path]::GetFullPath((Join-Path $dist $name))
 if (!$payload.StartsWith(($dist + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Destination de construction invalide.' }
 $runtime = Join-Path $root 'node_modules\electron\dist'
 if (!(Test-Path -LiteralPath (Join-Path $runtime 'electron.exe'))) { throw 'Installer les dependances avec npm ci avant de construire.' }
+Assert-MyneigeX64Runtime (Join-Path $runtime 'electron.exe')
 if ((Get-Content -LiteralPath (Join-Path $runtime 'version') -Raw).Trim() -cne $metadata.devDependencies.electron) { throw 'Runtime Electron non conforme a la version epinglee.' }
 if (!$SkipNativeBuild) {
     & (Join-Path $PSScriptRoot 'build-poc.ps1')
     & (Join-Path $PSScriptRoot 'build-launcher.ps1')
 }
-foreach ($file in @('.local\poc\myneige-poc.exe','.local\poc\myneige-vault.exe','.local\launcher\MyNEIGE.exe')) {
+foreach ($file in @('.local\poc\myneige-poc.exe','.local\poc\myneige-vault.exe','.local\poc\myneige-relay.exe','.local\poc\myneige-public-relay.exe','.local\launcher\MyNEIGE.exe')) {
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $root $file))
     if ($version.ProductVersion -cne $metadata.version) { throw "Binaire obsolete : $file" }
+    if ((Get-MyneigePeMachine (Join-Path $root $file)) -ne 0x8664) { throw "Binaire MyNEIGE x64 requis : $file" }
 }
+& (Join-Path $PSScriptRoot 'test-relays.ps1') -StaticOnly
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 if (Test-Path -LiteralPath $payload) {
     Assert-PlainTree $payload
@@ -52,10 +56,13 @@ foreach ($dependency in Get-Content -LiteralPath (Join-Path $root 'src\runtime-d
 }
 Copy-Item -LiteralPath (Join-Path $root '.local\poc\myneige-poc.exe') -Destination (Join-Path $payload 'bin\myneige-controller.exe')
 Copy-Item -LiteralPath (Join-Path $root '.local\poc\myneige-vault.exe') -Destination (Join-Path $payload 'bin\myneige-vault.exe')
+foreach ($relay in @('myneige-relay.exe','myneige-public-relay.exe')) {
+    Copy-Item -LiteralPath (Join-Path $root ('.local\poc\' + $relay)) -Destination (Join-Path $payload ('bin\' + $relay))
+}
 Copy-Item -LiteralPath (Join-Path $root '.local\launcher\MyNEIGE.exe') -Destination (Join-Path $payload 'MyNEIGE.exe')
 foreach ($file in @('LICENSE')) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $payload }
 foreach ($file in @('distribution-common.ps1','launch-distribution.ps1','run-distribution-worker.ps1',
-    'openvpn-setup.ps1','openvpn-prerequisites.ps1','openvpn-driver-store.ps1')) {
+    'openvpn-setup.ps1','openvpn-prerequisites.ps1','openvpn-driver-store.ps1','windows-platform.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $payload 'scripts')
 }
 $appMetadata = [ordered]@{ name = $metadata.name; version = $metadata.version; revision = $metadata.revision; description = $metadata.description;
@@ -64,7 +71,7 @@ $appMetadata = [ordered]@{ name = $metadata.name; version = $metadata.version; r
 Copy-Item -LiteralPath (Join-Path $root 'docs\ALPHA_TESTER.md') -Destination (Join-Path $payload 'LIRE-MOI.md')
 Copy-Item -LiteralPath (Join-Path $root 'docs\UPDATES.md') -Destination $payload
 $notices = "MyNEIGE $($metadata.version) - Matra DevProd`r`nApache-2.0 : LICENSE`r`n`r`nElectron $($metadata.devDependencies.electron) : resources/runtime/LICENSE`r`nChromium et composants embarques : resources/runtime/LICENSES.chromium.html`r`n`r`nOpenVPN Community et TAP ne sont pas redistribues dans ce paquet.`r`nLeur installateur officiel est telecharge et verifie separement, avec votre accord.`r`nAucun profil VPN n'est fourni ; chaque utilisateur importe son fichier personnel.`r`n"
-$notices += "`r`nTerminal SSH : ssh2 (MIT), xterm.js et addon-fit (MIT), asn1 (MIT), safer-buffer (MIT), bcrypt-pbkdf (BSD-3-Clause), tweetnacl (Unlicense).`r`nLes textes de licence sont inclus dans les repertoires node_modules de ces composants.`r`n"
+$notices += "`r`nTerminal SSH : ssh2 (MIT), xterm.js, addon-fit et addon-search (MIT), asn1 (MIT), safer-buffer (MIT), bcrypt-pbkdf (BSD-3-Clause), tweetnacl (Unlicense).`r`nLes textes de licence sont inclus dans les repertoires node_modules de ces composants.`r`n"
 [IO.File]::WriteAllText((Join-Path $payload 'THIRD-PARTY-NOTICES.txt'), $notices, [Text.UTF8Encoding]::new($false))
 Assert-PlainTree $payload
 $files = @(Get-ChildItem -LiteralPath $payload -Recurse -File | Sort-Object FullName | ForEach-Object {

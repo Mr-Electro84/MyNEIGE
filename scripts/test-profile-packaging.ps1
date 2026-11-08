@@ -7,8 +7,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $binary = Join-Path $root '.local\poc\myneige-poc.exe'
 $fixture = [IO.Path]::GetFullPath((Join-Path $root ('.local\profile-payload-' + [Guid]::NewGuid().ToString('N'))))
 if (!$fixture.StartsWith(([IO.Path]::GetFullPath($root).TrimEnd('\') + '\.local\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Fixture hors du projet.' }
-$files = @('MyNEIGE.exe','bin/myneige-controller.exe','bin/myneige-vault.exe','resources/runtime/electron.exe','src/main/index.js',
-    'src/main/about.js','package.json','LICENSE','scripts/launch-distribution.ps1','scripts/run-distribution-worker.ps1','scripts/openvpn-setup.ps1')
+$files = @('MyNEIGE.exe','bin/myneige-controller.exe','bin/myneige-vault.exe','bin/myneige-relay.exe','bin/myneige-public-relay.exe','resources/runtime/electron.exe','src/main/index.js',
+    'src/main/about.js','package.json','LICENSE','scripts/launch-distribution.ps1','scripts/run-distribution-worker.ps1','scripts/openvpn-setup.ps1','scripts/windows-platform.ps1')
 function Assert-PayloadResult([bool]$Expected) {
     $previous = $ErrorActionPreference
     try {
@@ -38,6 +38,16 @@ try {
     $manifest = @{ product='MyNEIGE'; schema=1; architecture='x64'; version='fixture'; files=$entries }
     [IO.File]::WriteAllText((Join-Path $fixture 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5))
     Assert-PayloadResult $true
+    # Le helper est indispensable au choix du moteur VPN natif sur ARM64.
+    $manifest.files = @($entries | Where-Object { $_.path -ne 'scripts/windows-platform.ps1' })
+    [IO.File]::WriteAllText((Join-Path $fixture 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5))
+    Assert-PayloadResult $false
+    $manifest.files = $entries
+    $manifest.architecture = 'arm64'
+    [IO.File]::WriteAllText((Join-Path $fixture 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5))
+    Assert-PayloadResult $false
+    $manifest.architecture = 'x64'
+    [IO.File]::WriteAllText((Join-Path $fixture 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5))
     # Un coffre absent du manifeste doit être refusé, même si les autres fichiers sont valides.
     $withoutVault = $entries | Where-Object { $_.path -ne 'bin/myneige-vault.exe' }
     $manifest.files = @($withoutVault)
@@ -45,6 +55,17 @@ try {
     Assert-PayloadResult $false
     $manifest.files = $entries
     [IO.File]::WriteAllText((Join-Path $fixture 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5))
+    foreach ($relay in @('bin/myneige-relay.exe','bin/myneige-public-relay.exe')) {
+        $manifest.files = @($entries | Where-Object { $_.path -ne $relay })
+        [IO.File]::WriteAllText((Join-Path $fixture 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5))
+        Assert-PayloadResult $false
+        $manifest.files = $entries
+        [IO.File]::WriteAllText((Join-Path $fixture 'distribution.json'), ($manifest | ConvertTo-Json -Depth 5))
+        $target = Join-Path $fixture $relay
+        Remove-Item -LiteralPath $target
+        Assert-PayloadResult $false
+        [IO.File]::WriteAllText($target, 'fixture-only')
+    }
     foreach ($extension in @('.ovpn','.dpapi')) {
         $personal = Join-Path $fixture ('forbidden' + $extension)
         [IO.File]::WriteAllText($personal, 'synthetic data, not a user profile')
@@ -53,7 +74,7 @@ try {
     }
     [IO.File]::WriteAllText((Join-Path $fixture 'LICENSE'), 'altered fixture')
     Assert-PayloadResult $false
-    Write-Output 'PROFILE_PACKAGING_TEST checks=5 synthetic_files_only=true no_distribution_built=true'
+    Write-Output 'PROFILE_PACKAGING_TEST checks=11 synthetic_files_only=true no_distribution_built=true'
 } finally {
     if (Test-Path -LiteralPath $fixture) {
         $resolved = (Resolve-Path -LiteralPath $fixture).Path

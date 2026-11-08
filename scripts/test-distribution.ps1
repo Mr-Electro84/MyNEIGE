@@ -3,6 +3,7 @@ param([string]$Payload)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'distribution-common.ps1')
+. (Join-Path $PSScriptRoot 'windows-platform.ps1')
 $metadata = Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
 if (!$Payload) { $Payload = Join-Path $root ('dist\MyNEIGE-' + $metadata.version + '-win-x64') }
 $Payload = [IO.Path]::GetFullPath($Payload)
@@ -11,12 +12,13 @@ function Assert-Distribution([bool]$Condition, [string]$Message) {
     if (!$Condition) { throw $Message }; $script:checks++
 }
 $manifest = Test-DistributionPayload $Payload
+Assert-MyneigeX64Runtime (Join-Path $Payload 'resources\runtime\electron.exe')
 Assert-Distribution ($manifest.version -ceq $metadata.version) 'Wrong shipped version.'
 Assert-Distribution (!(Get-ChildItem -LiteralPath $Payload -Recurse -File -Filter '*.ovpn')) 'VPN profile must not be shipped.'
 foreach ($excluded in @('node_modules','.git','.local','state','tests','native','scripts\build-poc.ps1')) {
     Assert-Distribution (!(Test-Path -LiteralPath (Join-Path $Payload $excluded))) "Development content shipped: $excluded"
 }
-foreach ($executable in @('MyNEIGE.exe','bin\myneige-controller.exe','bin\myneige-vault.exe')) {
+foreach ($executable in @('MyNEIGE.exe','bin\myneige-controller.exe','bin\myneige-vault.exe','bin\myneige-relay.exe','bin\myneige-public-relay.exe')) {
     $file = Join-Path $Payload $executable
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($file)
     Assert-Distribution ($version.ProductVersion -ceq $metadata.version -and $version.CompanyName -ceq 'Matra DevProd') "Wrong executable metadata: $executable"
@@ -95,4 +97,9 @@ try {
 Assert-Distribution ($LASTEXITCODE -eq 0) 'Shipped native protocol tests failed.'
 & (Join-Path $Payload 'bin\myneige-vault.exe') vault-capabilities
 Assert-Distribution ($LASTEXITCODE -eq 0) 'Shipped dedicated vault failed.'
+foreach ($role in @('vpn','public')) {
+    $name = if ($role -eq 'vpn') { 'myneige-relay.exe' } else { 'myneige-public-relay.exe' }
+    $capabilities = @(& (Join-Path $Payload ('bin\' + $name)) --capabilities)
+    Assert-Distribution ($LASTEXITCODE -eq 0 -and ($capabilities -join "`n") -ceq "MYNEIGE_RELAY_PROTOCOL=1`nMYNEIGE_RELAY_ROLE=$role") 'Shipped relay role mismatch.'
+}
 Write-Output "DISTRIBUTION_TEST checks=$checks manifest=true corruption_refused=true profile_embedded=false x64=true no_network_changes=true"

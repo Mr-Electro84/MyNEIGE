@@ -2,13 +2,15 @@
 
 MyNEIGE associe un contrôleur C++/Win32, le filtrage WFP et une interface Electron. Les choix initiaux ont été validés par des essais contrôlés le 23 octobre 2026, puis complétés par les évolutions décrites ci-dessous. La qualification sur cette machine ne vaut pas homologation sur tous les réseaux Windows.
 
+Les relais sont désormais des exécutables dédiés à rôle fixe (`myneige-relay.exe` et `myneige-public-relay.exe`), sans autocopie du contrôleur, création de processus ni gestion WFP. Les sondes de développement sont séparées et ne sont pas distribuées. Voir [les responsabilités et les contrôles de séparation](RELAY_EXECUTABLES.md).
+
 ## Frontières retenues
 
 Le contrôleur élevé possède le TAP dédié, la route, les règles WFP et les Jobs. Il valide les signatures OpenVPN/tapctl et reconstruit le profil depuis une liste de directives admises. Aucun script fourni par le profil n’est exécuté. Son objet processus est protégé contre la terminaison et l’injection par le travailleur de niveau moyen.
 
 Le relais et Electron utilisent un jeton de niveau moyen, sans appartenance administrateur active ni privilèges administratifs conservés. Les images et sources sont copiées dans un répertoire de session appartenant aux administrateurs ; le compte de session dispose seulement de lecture/exécution. Une autre application Electron utilisant le binaire du dépôt n’est donc pas placée sous les règles de cette session.
 
-Le relais VPN est bloqué par défaut en IPv4/IPv6. Ses connexions DNS et web protégées exigent l’adresse source et l’interface VPN vérifiées. Une route de métrique 60000 rend ces sockets liées utilisables ; les autres exécutables sont interdits sur le TAP. Depuis la décision du 25 octobre 2026, il délègue les seuls domaines publics autorisés à un second relais natif, image distincte `public-relay.exe`, via un port local authentifié. Ce second relais revérifie la liste publique avant résolution, et WFP le limite à l'adresse et à l'interface du réseau habituel sélectionné avant le tunnel. Il ne reçoit aucun permis sur le VPN. Aucun DNS hôte ni proxy système n’est configuré. Voir [le routage explicite et sa validation](EMBEDDED_CONTENT.md).
+Le relais VPN est bloqué par défaut en IPv4/IPv6. Ses connexions DNS et web protégées exigent l’adresse source et l’interface VPN vérifiées. Une route de métrique 60000 rend ces sockets liées utilisables ; les autres exécutables sont interdits sur le TAP. Depuis la décision du 25 octobre 2026, il délègue les seuls domaines publics autorisés à un second relais natif, exécutable dédié `myneige-public-relay.exe`, via un port local authentifié. Ce second relais revérifie la liste publique avant résolution, et WFP le limite à l'adresse et à l'interface du réseau habituel sélectionné avant le tunnel. Il ne reçoit aucun permis sur le VPN. Aucun DNS hôte ni proxy système n’est configuré. Voir [le routage explicite et sa validation](EMBEDDED_CONTENT.md).
 
 L’identité d’une génération comprend GUID, nom aléatoire, LUID, index et adresse. Les essais ont montré que Windows réutilise le même LUID/index après destruction et recréation d’un TAP : ils ne suffisent pas seuls. Les sockets revérifient cette identité ; une reconnexion exige une nouvelle session et une nouvelle validation.
 

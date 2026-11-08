@@ -13,5 +13,4 @@ void prepareRuntime(const std::filesystem::path &source, const std::filesystem::
                     const std::filesystem::path &protectedRoot);
 void openDistributionLog(const std::string &name);
 int runtimeCacheTest(const std::filesystem::path &projectRoot);
-int runtimeCacheProbe(const std::filesystem::path &path);
 } // namespace neige

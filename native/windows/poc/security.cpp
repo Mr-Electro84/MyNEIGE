@@ -136,51 +136,13 @@ void grantUserRead(const std::filesystem::path &path) {
                              descriptor) != 0,
             "Cannot grant read-only session access");
 }
-static DWORD parentPid() {
-    Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
-    require(snapshot.h != INVALID_HANDLE_VALUE, "Cannot inspect creator process");
-    PROCESSENTRY32W entry{sizeof(entry)};
-    for (BOOL found = Process32FirstW(snapshot.h, &entry); found; found = Process32NextW(snapshot.h, &entry))
-        if (entry.th32ProcessID == GetCurrentProcessId())
-            return entry.th32ParentProcessID;
-    throw std::runtime_error("Creator process unavailable");
-}
-void requirePrivilegedParent() {
-    Handle parent(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentPid()));
-    require(parent.h != nullptr, "Worker requires its privileged supervisor");
-    auto token = processToken(parent.h, TOKEN_QUERY);
-    auto integrity = tokenInfo(token.h, TokenIntegrityLevel);
-    auto sid = reinterpret_cast<TOKEN_MANDATORY_LABEL *>(integrity.data())->Label.Sid;
-    DWORD rid = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
-    TOKEN_ELEVATION elevation{};
-    DWORD size = sizeof(elevation);
-    require(GetTokenInformation(token.h, TokenElevation, &elevation, size, &size) != 0 && elevation.TokenIsElevated &&
-                rid >= SECURITY_MANDATORY_HIGH_RID,
-            "Worker creator is not an elevated supervisor");
-}
-int securityProbe() {
-    requirePrivilegedParent();
-    require(!isAdministrator(), "Worker unexpectedly retains administrator membership");
-    auto token = processToken(GetCurrentProcess(), TOKEN_QUERY);
-    auto integrity = tokenInfo(token.h, TokenIntegrityLevel);
-    auto sid = reinterpret_cast<TOKEN_MANDATORY_LABEL *>(integrity.data())->Label.Sid;
-    DWORD rid = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
-    require(rid == SECURITY_MANDATORY_MEDIUM_RID, "Worker must have medium integrity");
-    Handle write(CreateFileW(imagePath().c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr));
-    require(write.h == INVALID_HANDLE_VALUE, "Worker can modify its protected image");
-    Handle parentWrite(OpenProcess(PROCESS_TERMINATE, FALSE, parentPid()));
-    require(parentWrite.h == nullptr, "Worker can terminate its privileged supervisor");
-    std::cout << "SECURITY_PROBE medium_integrity=true admin=false image_writable=false supervisor_terminable=false"
-              << std::endl;
-    return 0;
-}
 int privilegeTest() {
     require(isAdministrator(), "privilege-test requires an elevated console");
     protectSupervisor();
     Staging stage;
     stage.allowUserRead();
     Job job;
-    auto child = job.spawn(stage.executable.wstring(), {L"security-probe"}, true, true);
+    auto child = job.spawn(stage.diagnostic().wstring(), {L"security-probe"}, true, true);
     auto result = child.line(10000);
     if (result.rfind("ERROR: ", 0) == 0)
         std::cout << "SECURITY_PROBE_FAILURE " << result << std::endl;

@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 $devCmd = Join-Path $vsRoot 'Common7\Tools\VsDevCmd.bat'
 $sourceRoot = Join-Path $repoRoot 'native\windows\poc'
 $sources = Get-ChildItem -LiteralPath $sourceRoot -Filter '*.cpp' | ForEach-Object { '"' + $_.FullName + '"' }
-$sources += @('hash.cpp','vpn-profile.cpp') | ForEach-Object { '"' + (Join-Path $repoRoot ('native\windows\shared\' + $_)) + '"' }
+$sources += @('hash.cpp','vpn-profile.cpp','network.cpp','network-protocol.cpp','worker-origin.cpp') | ForEach-Object { '"' + (Join-Path $repoRoot ('native\windows\shared\' + $_)) + '"' }
 $resourceScript = Join-Path $buildRoot 'controller.rc'
 & (Join-Path $PSScriptRoot 'write-version-resource.ps1') -Destination $resourceScript -FileName 'myneige-controller.exe' -Description 'MyNEIGE - Controleur reseau'
 $compilerArgs = '/nologo /MP2 /MT /std:c++20 /EHsc /W4 /WX /utf-8 /DUNICODE /D_UNICODE /D_WIN32_WINNT=0x0A00 /O2 /guard:cf /sdl ' + ($sources -join ' ') + ' controller.res /Fe:"myneige-poc.exe" /link /DYNAMICBASE /NXCOMPAT ws2_32.lib iphlpapi.lib fwpuclnt.lib bcrypt.lib advapi32.lib ole32.lib winhttp.lib shell32.lib wintrust.lib crypt32.lib version.lib windowsapp.lib userenv.lib user32.lib'
@@ -23,3 +23,4 @@ try { & $env:ComSpec /d /c $buildScript; if ($LASTEXITCODE -ne 0) { throw "Compi
 finally { Pop-Location }
 Write-Output (Join-Path $buildRoot 'myneige-poc.exe')
 & (Join-Path $PSScriptRoot 'build-vault.ps1')
+& (Join-Path $PSScriptRoot 'build-relays.ps1')

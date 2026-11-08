@@ -10,14 +10,14 @@ La vérification automatique et manuelle par API est temporairement désactivée
 
 Les paragraphes suivants décrivent le mécanisme conservé pour une future activation. Le remplacement par NSIS reste indépendant et inchangé.
 
-La version installée et sa révision sont lues dans `package.json`. La révision est un entier positif strictement croissant à chaque publication : **3 pour 1.1.0-alpha.1** (précédemment 2 pour 1.0.2-alpha.1 et 1 pour 1.0.1-alpha.1). Incrémenter `revision` en même temps que `version` pour chaque nouvelle livraison. La construction recopie ces deux champs dans le paquet ; ne pas utiliser `app.getVersion()`, qui désigne Electron dans ce lancement supervisé.
+La version installée et sa révision sont lues dans `package.json`. La révision est un entier positif strictement croissant à chaque publication : **4 pour 1.1.1-alpha.1** (précédemment 3 pour 1.1.0-alpha.1, 2 pour 1.0.2-alpha.1 et 1 pour 1.0.1-alpha.1). Incrémenter `revision` en même temps que `version` pour chaque nouvelle livraison. La construction recopie ces deux champs dans le paquet ; ne pas utiliser `app.getVersion()`, qui désigne Electron dans ce lancement supervisé.
 
 Une fois les relais de la session prêts, l’application consulte une seule fois `https://my-neige.42web.io/update.php?flag=version`. Cette étape intervient après la connexion VPN, mais **l’appel HTTPS et sa résolution DNS passent hors VPN**, par le relais public confiné sur le réseau habituel. Le formulaire reste local et sans accès réseau ; une session Chromium dédiée ne partage aucun cookie universitaire. Seul le nom exact `my-neige.42web.io` est ajouté aux destinations du relais public. Les politiques de navigation des sites universitaires restent inchangées.
 
 Le serveur doit répondre HTTP 200 avec ce JSON :
 
 ```json
-{"version":"1.1.0-alpha.1","revision":3}
+{"version":"1.1.1-alpha.1","revision":4}
 ```
 
 Un toast local, non modal, apparaît en bas de l’écran si **la version diffère et la révision reçue est supérieure**. Il ne prend pas le focus et reste visible jusqu’au choix de l’utilisateur :

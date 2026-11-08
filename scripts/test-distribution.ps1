@@ -14,10 +14,27 @@ function Assert-Distribution([bool]$Condition, [string]$Message) {
 $manifest = Test-DistributionPayload $Payload
 Assert-MyneigeX64Runtime (Join-Path $Payload 'resources\runtime\electron.exe')
 Assert-Distribution ($manifest.version -ceq $metadata.version) 'Wrong shipped version.'
+$shippedMetadata = Get-Content -LiteralPath (Join-Path $Payload 'package.json') -Raw | ConvertFrom-Json
+Assert-Distribution ($shippedMetadata.revision -eq $metadata.revision) 'Wrong shipped update revision.'
 Assert-Distribution (!(Get-ChildItem -LiteralPath $Payload -Recurse -File -Filter '*.ovpn')) 'VPN profile must not be shipped.'
-foreach ($excluded in @('node_modules','.git','.local','state','tests','native','scripts\build-poc.ps1')) {
+foreach ($excluded in @('.git','.local','state','tests','native','scripts\build-poc.ps1')) {
     Assert-Distribution (!(Test-Path -LiteralPath (Join-Path $Payload $excluded))) "Development content shipped: $excluded"
 }
+# Seules les dépendances d'exécution SSH/terminal sont distribuées, sans modules natifs Node.
+$runtimeDependencies = @(Get-Content -LiteralPath (Join-Path $root 'src\runtime-dependencies.txt'))
+$shippedDependencies = @(Get-ChildItem -LiteralPath (Join-Path $Payload 'node_modules') -Directory | ForEach-Object {
+    if ($_.Name.StartsWith('@')) {
+        $scope = $_.Name
+        Get-ChildItem -LiteralPath $_.FullName -Directory | ForEach-Object { $scope + '/' + $_.Name }
+    } else { $_.Name }
+})
+Assert-Distribution (!(@(Compare-Object $runtimeDependencies $shippedDependencies).Count)) 'Wrong shipped runtime dependencies.'
+foreach ($dependency in $runtimeDependencies) {
+    $dependencyMetadata = Get-Content -LiteralPath (Join-Path $Payload ('node_modules\' + $dependency + '\package.json')) -Raw | ConvertFrom-Json
+    $expectedDependency = Get-Content -LiteralPath (Join-Path $root ('node_modules\' + $dependency + '\package.json')) -Raw | ConvertFrom-Json
+    Assert-Distribution ($dependencyMetadata.name -ceq $dependency -and $dependencyMetadata.version -ceq $expectedDependency.version) "Wrong runtime dependency metadata: $dependency"
+}
+Assert-Distribution (!(Get-ChildItem -LiteralPath (Join-Path $Payload 'node_modules') -Recurse -File -Filter '*.node')) 'Node native accelerator must not be shipped.'
 foreach ($executable in @('MyNEIGE.exe','bin\myneige-controller.exe','bin\myneige-vault.exe','bin\myneige-relay.exe','bin\myneige-public-relay.exe')) {
     $file = Join-Path $Payload $executable
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($file)

@@ -4,7 +4,7 @@ MyNEIGE rassemble les services de l’Université d’Avignon dans une applicati
 
 L’application démarre le VPN universitaire et facilite la connexion aux services depuis une même fenêtre. Vos autres applications continuent d’utiliser leur connexion Internet habituelle.
 
-**Version actuelle : 1.1.0-alpha.1 · Révision 3 · Windows 11 x64, ARM64 via émulation x64 (expérimental) · Licence Apache 2.0**
+**Version actuelle : 1.1.1-alpha.1 · Révision 4 · Windows 11 x64, ARM64 via émulation x64 (expérimental) · Licence Apache 2.0**
 
 ## Ce que propose MyNEIGE
 
